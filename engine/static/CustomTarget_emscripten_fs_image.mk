@@ -1224,6 +1224,7 @@ gb_emscripten_fs_image_files += \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/config/soffice.cfg/modules/scalc/ui/recalcquerydialog.ui \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/config/soffice.cfg/modules/scalc/ui/regressiondialog.ui \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/config/soffice.cfg/modules/scalc/ui/replacenulltransformationentry.ui \
+    $(INSTROOT)/$(LIBO_SHARE_FOLDER)/config/soffice.cfg/modules/scalc/ui/resizetablerangedialog.ui \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/config/soffice.cfg/modules/scalc/ui/retypepassdialog.ui \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/config/soffice.cfg/modules/scalc/ui/retypepassworddialog.ui \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/config/soffice.cfg/modules/scalc/ui/rightfooterdialog.ui \
