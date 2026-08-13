@@ -6,6 +6,7 @@
 # -- Available env vars --
 # * COLLABORA_ONLINE_REPO - which git repo to clone the online monorepo from
 # * COLLABORA_ONLINE_BRANCH - which branch to build
+# * COLLABORA_ONLINE_REVISION - exact Kreoh source revision to build
 # * ENGINE_BUILD_TARGET - which make target to run for the engine
 # * ONLINE_EXTRA_BUILD_OPTIONS - extra build options for online
 #
@@ -13,12 +14,20 @@
 # assets are linked against glibc and won't work on musl.
 
 if [ -z "$COLLABORA_ONLINE_REPO" ]; then
-  COLLABORA_ONLINE_REPO="https://gerrit.collaboraoffice.com/online"
+  COLLABORA_ONLINE_REPO="https://github.com/Kreoh/online.mirror.git"
 fi;
 if [ -z "$COLLABORA_ONLINE_BRANCH" ]; then
   COLLABORA_ONLINE_BRANCH="main"
 fi;
-echo "Building branch '$COLLABORA_ONLINE_BRANCH' from '$COLLABORA_ONLINE_REPO'"
+if [ -z "$COLLABORA_ONLINE_REVISION" ]; then
+  COLLABORA_ONLINE_REVISION="9b56f5583ab8df2202fb0b8471dcbf622d7825f8"
+fi;
+echo "Building exact revision '$COLLABORA_ONLINE_REVISION' from '$COLLABORA_ONLINE_REPO'"
+
+if [ -n "${ENGINE_ASSETS:-}" ]; then
+  echo "ENGINE_ASSETS is prohibited: build the document engine from Kreoh source." >&2
+  exit 1
+fi
 
 if [ -z "$ENGINE_BUILD_TARGET" ]; then
   ENGINE_BUILD_TARGET=""
@@ -43,6 +52,7 @@ mkdir -p "$INSTDIR"
 
 # Clone the online monorepo (engine/ contains the rendering engine)
 git clone --depth=1 --branch "$COLLABORA_ONLINE_BRANCH" "$COLLABORA_ONLINE_REPO" online || exit 1
+(cd online && git fetch origin "$COLLABORA_ONLINE_REVISION" && git checkout --detach -f "$COLLABORA_ONLINE_REVISION" && test "$(git rev-parse HEAD)" = "$COLLABORA_ONLINE_REVISION") || exit 1
 
 ##### engine #####
 
@@ -63,12 +73,3 @@ cp -a online/engine/instdir "$INSTDIR"/opt/collaboraoffice
 
 # copy stuff
 ( cd online && DESTDIR="$INSTDIR" make install ) || exit 1
-
-# Build online branding if available
-if test -d online-branding ; then
-  if ! which sass &> /dev/null; then npm install -g sass; fi
-  cd online-branding
-  ./brand.sh $INSTDIR/opt/collaboraoffice $INSTDIR/usr/share/coolwsd/browser/dist CODE # CODE
-  ./brand.sh $INSTDIR/opt/collaboraoffice $INSTDIR/usr/share/coolwsd/browser/dist NC-theme-community # Nextcloud Office
-  cd ..
-fi

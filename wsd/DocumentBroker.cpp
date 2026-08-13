@@ -709,6 +709,14 @@ void DocumentBroker::pollThread()
                     // We will never save. No need to wait for timeout.
                     LOG_DBG("Doc disconnected while saving. Ending save activity.");
                     _saveManager.setLastSaveResult(/*success=*/false, /*newVersion=*/false);
+                    if (_agentSaveAttempt)
+                    {
+                        if (const auto serializingSession =
+                                _agentSaveAttempt->serializingSession())
+                            serializingSession->rejectSaveResponse(
+                                _agentSaveAttempt->saveRequestId());
+                        abandonAgentSaveAttempt("Kit disconnected while saving");
+                    }
                     endActivity();
                 }
                 else
@@ -716,7 +724,22 @@ void DocumentBroker::pollThread()
                 {
                     LOG_DBG("Saving timedout. Ending save activity.");
                     _saveManager.setLastSaveResult(/*success=*/false, /*newVersion=*/false);
+                    std::shared_ptr<ClientSession> timedOutSession;
+                    if (_agentSaveAttempt)
+                    {
+                        timedOutSession = _agentSaveAttempt->serializingSession();
+                        if (timedOutSession)
+                            timedOutSession->rejectSaveResponse(
+                                _agentSaveAttempt->saveRequestId());
+                        abandonAgentSaveAttempt("save response timed out");
+                    }
                     endActivity();
+                    if (timedOutSession)
+                    {
+                        timedOutSession->sendTextFrameAndLogError(
+                            "error: cmd=storage kind=savetimedout");
+                        disconnectSessionInternal(timedOutSession);
+                    }
                 }
             }
             break;
@@ -976,6 +999,8 @@ DocumentBroker::~DocumentBroker()
 
     LOG_INF("~DocumentBroker [" << _docKey << "] destroyed with " << _sessions.size()
                                 << " sessions left");
+
+    _agentSaveAttempt.reset();
 
     // Do this early - to avoid operating on _childProcess from two threads.
     _poll->joinThread();
@@ -2955,6 +2980,18 @@ DocumentBroker::NeedToUpload DocumentBroker::needToUploadToStorage() const
         return NeedToUpload::No;
     }
 
+    if (_agentSaveNoRetryFileTime && _storage)
+    {
+        const auto localTime =
+            FileUtil::Stat(_storage->getRootFilePathUploading()).modifiedTimepoint();
+        if (localTime == *_agentSaveNoRetryFileTime)
+        {
+            LOG_DBG("Not retrying the exact local version from a failed operation-marked agent "
+                    "upload with ordinary browser authority");
+            return NeedToUpload::No;
+        }
+    }
+
     // When destroying, we might have to force uploading if always_save_on_exit=true.
     // If unloadRequested is set, assume we will unload after uploading and exit.
     if (isUnloading() && _alwaysSaveOnExit && _saveManager.version() > 0)
@@ -3033,10 +3070,62 @@ bool DocumentBroker::isNextSaveAutosave() const
     return _nextStorageAttrs.isAutosave();
 }
 
+void DocumentBroker::abandonAgentSaveAttempt(const std::string_view reason)
+{
+    if (!_agentSaveAttempt)
+        return;
+
+    LOG_WRN("Abandoning operation-marked agent save [" << _agentSaveAttempt->operationId()
+                                                         << "] for docKey [" << _docKey
+                                                         << "]: " << reason);
+    if (_agentSaveAttempt->phase() == AgentSaveAttempt::Phase::Uploading && _storage)
+    {
+        _agentSaveNoRetryFileTime =
+            FileUtil::Stat(_storage->getRootFilePathUploading()).modifiedTimepoint();
+    }
+    _nextStorageAttrs.reset();
+    _currentStorageAttrs.reset();
+    _lastStorageAttrs.reset();
+    _agentSaveAttempt.reset();
+}
+
 void DocumentBroker::handleSaveResponse(const std::shared_ptr<ClientSession>& session,
                                         const Poco::JSON::Object::Ptr& json)
 {
     ASSERT_CORRECT_THREAD();
+
+    const auto responseCorrelation = session->consumeSaveResponse();
+    if (responseCorrelation && responseCorrelation->rejected)
+    {
+        LOG_WRN("Ignoring delayed agent-save response from cancelled serializing session ["
+                << session->getId() << "] on docKey [" << _docKey << ']');
+        return;
+    }
+
+    bool validAgentAuthority = true;
+    if (_agentSaveAttempt)
+    {
+        const bool matchingResponse =
+            _agentSaveAttempt->phase() == AgentSaveAttempt::Phase::AwaitingSaveResponse &&
+            session->getId() == _agentSaveAttempt->serializingSessionId() &&
+            responseCorrelation &&
+            responseCorrelation->requestId == _agentSaveAttempt->saveRequestId() &&
+            _saveManager.lastSaveRequestTime() == _agentSaveAttempt->saveRequestTime();
+        if (!matchingResponse)
+        {
+            LOG_WRN("Ignoring mismatched save response while operation-marked agent save ["
+                    << _agentSaveAttempt->operationId() << "] is active on docKey [" << _docKey
+                    << ']');
+            return;
+        }
+
+        const auto authoritySession = _agentSaveAttempt->authoritySession();
+        validAgentAuthority =
+            authoritySession &&
+            authoritySession->getId() == _agentSaveAttempt->authoritySessionId() &&
+            authoritySession->getDocumentBroker().get() == this &&
+            authoritySession->isAgentSaveEligible();
+    }
 
     // When dontSaveIfUnmodified=true, there is a shortcut in LOKit
     // that shortcuts saving when the document is not modified.
@@ -3128,7 +3217,42 @@ void DocumentBroker::handleSaveResponse(const std::shared_ptr<ClientSession>& se
         broadcastSaveResult(false, "Could not save the document");
     }
 
-    checkAndUploadToStorage(session, /*justSaved=*/success || result == "unmodified");
+    if (_agentSaveAttempt)
+    {
+        if (!success)
+        {
+            if (_docState.activity() == DocumentState::Activity::Save)
+                endActivity();
+            abandonAgentSaveAttempt("Core save failed");
+            broadcastSaveResult(false, "Agent save failed in Core");
+            return;
+        }
+
+        if (!validAgentAuthority)
+        {
+            if (_docState.activity() == DocumentState::Activity::Save)
+                endActivity();
+            _agentSaveAttempt->startUploading();
+            abandonAgentSaveAttempt("agent upload authorisation expired or detached");
+            broadcastSaveResult(false, "Agent save authorisation expired");
+            return;
+        }
+
+        const auto authoritySession = _agentSaveAttempt->authoritySession();
+        _agentSaveAttempt->startUploading();
+        checkAndUploadToStorage(authoritySession, /*justSaved=*/true);
+        if (_agentSaveAttempt && !isAsyncUploading())
+        {
+            abandonAgentSaveAttempt("agent upload could not be started");
+            broadcastSaveResult(false, "Agent upload could not be started");
+        }
+    }
+    else
+    {
+        if (success)
+            _agentSaveNoRetryFileTime.reset();
+        checkAndUploadToStorage(session, /*justSaved=*/success || result == "unmodified");
+    }
 }
 
 // This is called when either we just got save response, or,
@@ -3327,6 +3451,33 @@ void DocumentBroker::uploadToStorageInternal(const std::shared_ptr<ClientSession
     ASSERT_CORRECT_THREAD();
     LOG_ASSERT_MSG(session, "Must have a valid ClientSession");
 
+    if (_uploadRequest && !_uploadRequest->isComplete())
+    {
+        LOG_DBG("Upload already in progress for docKey [" << _docKey << "]");
+        return;
+    }
+
+    if (_agentSaveAttempt &&
+        (_agentSaveAttempt->phase() != AgentSaveAttempt::Phase::Uploading ||
+         session->getId() != _agentSaveAttempt->authoritySessionId()))
+    {
+        LOG_DBG("Operation-marked agent save owns the upload slot for docKey [" << _docKey << ']');
+        return;
+    }
+
+    if (!_agentSaveAttempt && _agentSaveNoRetryFileTime && _storage)
+    {
+        const auto localTime =
+            FileUtil::Stat(_storage->getRootFilePathUploading()).modifiedTimepoint();
+        if (localTime == *_agentSaveNoRetryFileTime)
+        {
+            LOG_WRN("Refusing browser-authorised upload of the exact version from a failed agent "
+                    "save on docKey ["
+                    << _docKey << ']');
+            return;
+        }
+    }
+
     const std::string sessionId = session->getId();
     if (!session->isEditable())
     {
@@ -3427,6 +3578,10 @@ void DocumentBroker::uploadToStorageInternal(const std::shared_ptr<ClientSession
         LOG_WRN("Failed to upload [" << _docKey << "] asynchronously. "
                                      << DocumentState::name(_docState.activity()));
         _storageManager.setLastUploadResult(false);
+
+        if (_agentSaveAttempt &&
+            _agentSaveAttempt->phase() == AgentSaveAttempt::Phase::Uploading)
+            abandonAgentSaveAttempt("asynchronous agent upload failed");
 
         switch (_docState.activity())
         {
@@ -3662,6 +3817,12 @@ void DocumentBroker::handleUploadToStorageResponse(const StorageBase::UploadResu
 {
     assert(_uploadRequest && "Expected to have a valid UploadRequest instance");
 
+    const auto uploadSession = _uploadRequest->session();
+    const bool agentUpload =
+        _agentSaveAttempt &&
+        _agentSaveAttempt->phase() == AgentSaveAttempt::Phase::Uploading && uploadSession &&
+        uploadSession->getId() == _agentSaveAttempt->authoritySessionId();
+
     // Storage upload is considered successful only when storage returns OK.
     const bool lastUploadSuccessful =
         uploadResult.getResult() == StorageBase::UploadResult::Result::OK;
@@ -3686,10 +3847,18 @@ void DocumentBroker::handleUploadToStorageResponse(const StorageBase::UploadResu
 
     if (uploadResult.getResult() == StorageBase::UploadResult::Result::OK)
     {
-        return handleUploadToStorageSuccessful(uploadResult);
+        handleUploadToStorageSuccessful(uploadResult);
+        if (agentUpload)
+        {
+            _agentSaveNoRetryFileTime.reset();
+            _agentSaveAttempt.reset();
+        }
+        return;
     }
 
     handleUploadToStorageFailed(uploadResult);
+    if (agentUpload)
+        abandonAgentSaveAttempt("agent upload failed");
 }
 
 void DocumentBroker::reportUploadToStorageFailed(std::string_view reason)
@@ -3715,6 +3884,11 @@ void DocumentBroker::handleUploadToStorageFailed(const StorageBase::UploadResult
     assert(uploadResult.getResult() != StorageBase::UploadResult::Result::OK &&
            "Expected upload failure");
     assert(_uploadRequest && "Expected to have a valid UploadRequest instance");
+
+    const auto uploadSession = _uploadRequest->session();
+    const bool agentUpload =
+        _agentSaveAttempt && uploadSession &&
+        uploadSession->getId() == _agentSaveAttempt->authoritySessionId();
 
     if (_docState.activity() == DocumentState::Activity::Rename)
     {
@@ -3781,7 +3955,7 @@ void DocumentBroker::handleUploadToStorageFailed(const StorageBase::UploadResult
         // Bound the refresh-on-unauthorized retry loop: a successful resetaccesstoken
         // flips state back to Token, so isRefreshingToken() alone can't gate further attempts.
         constexpr int MaxTokenRefreshAttempts = 3;
-        if (session && !session->isRefreshingToken() &&
+        if (!agentUpload && session && !session->isRefreshingToken() &&
             session->tokenRefreshAttempts() < MaxTokenRefreshAttempts)
         {
             // Ask the host for a fresh token before giving up.
@@ -4084,14 +4258,16 @@ DocumentBroker::NeedToSave DocumentBroker::needToSaveToDisk() const
 
 bool DocumentBroker::manualSave(const std::shared_ptr<ClientSession>& session,
                                 bool dontTerminateEdit, bool dontSaveIfUnmodified,
-                                const std::string& extendedData)
+                                const std::string& extendedData, bool allowBackground,
+                                const std::shared_ptr<ClientSession>& uploadSession)
 {
     // If we aren't saving already.
     if (_docState.activity() != DocumentState::Activity::Save)
     {
         LOG_DBG("Manual save by " << session->getName() << " on docKey [" << _docKey << ']');
         return sendUnoSave(session, dontTerminateEdit, dontSaveIfUnmodified,
-                           /*isAutosave=*/false, /*finalWrite=*/false, extendedData);
+                           /*isAutosave=*/false, /*finalWrite=*/false, extendedData,
+                           allowBackground, uploadSession);
     }
 
     LOG_DBG("Document [" << _docKey << "] is currently saving and cannot issue another save");
@@ -4373,12 +4549,27 @@ void DocumentBroker::autoSaveAndStop(const std::string_view reason)
 bool DocumentBroker::sendUnoSave(const std::shared_ptr<ClientSession>& session,
                                  bool dontTerminateEdit, bool dontSaveIfUnmodified,
                                  bool isAutosave, bool finalWrite,
-                                 const std::string& extendedData)
+                                 const std::string& extendedData, bool allowBackground,
+                                 const std::shared_ptr<ClientSession>& uploadSession)
 {
     ASSERT_CORRECT_THREAD();
 
     LOG_ASSERT_MSG(session, "Got null ClientSession");
     const std::string sessionId = session->getId();
+
+    if (_agentSaveAttempt || (_uploadRequest && !_uploadRequest->isComplete()) ||
+        isAsyncUploading())
+    {
+        LOG_WRN("Rejecting save while another save or upload owns docKey [" << _docKey << ']');
+        return false;
+    }
+
+    if (!session->canRegisterSaveRequest())
+    {
+        LOG_WRN("Rejecting save on session [" << sessionId
+                                                << "] while its earlier Core response is unresolved");
+        return false;
+    }
 
     LOG_INF("Saving doc [" << _docKey << "] using session [" << sessionId << ']');
 
@@ -4390,7 +4581,8 @@ bool DocumentBroker::sendUnoSave(const std::shared_ptr<ClientSession>& session,
     // Note: It's odd to capture these here, but this function is used from ClientSession too.
     const bool autosave = isAutosave || UNITWSD_CALL_INSTANCE(_unitWsd, isAutosave());
     const bool backgroundConfigured = (autosave && _backgroundAutoSave) || _backgroundManualSave;
-    const bool canBackground = forceBackgroundEnv || (!finalWrite && backgroundConfigured);
+    const bool canBackground =
+        allowBackground && (forceBackgroundEnv || (!finalWrite && backgroundConfigured));
     const bool background = isBackgroundSaveWorking(canBackground);
 
     std::ostringstream oss;
@@ -4432,6 +4624,13 @@ bool DocumentBroker::sendUnoSave(const std::shared_ptr<ClientSession>& session,
         LOG_DBG("Saving [" << _docKey << "] using [" << sessionId << "]: " << command);
 
         _saveManager.markLastSaveRequestTime();
+        const std::size_t saveRequestId = session->registerSaveRequest();
+        if (uploadSession)
+        {
+            _agentSaveAttempt.emplace(session, uploadSession, session->getId(),
+                                      uploadSession->getId(), extendedData, saveRequestId,
+                                      _saveManager.lastSaveRequestTime());
+        }
         if (_docState.activity() == DocumentState::Activity::None)
         {
             // If we aren't in the midst of any particular activity,
@@ -4442,6 +4641,8 @@ bool DocumentBroker::sendUnoSave(const std::shared_ptr<ClientSession>& session,
         return true;
     }
 
+    if (uploadSession)
+        _nextStorageAttrs.reset();
     LOG_ERR("Failed to save doc ["
             << _docKey << "]: Failed to forward .uno:Save command to session [" << sessionId
             << ']');
@@ -4593,6 +4794,21 @@ std::size_t DocumentBroker::removeSession(const std::shared_ptr<ClientSession>& 
     ASSERT_CORRECT_THREAD();
 
     LOG_ASSERT_MSG(session, "Got null ClientSession");
+
+    if (_agentSaveAttempt &&
+        (session->getId() == _agentSaveAttempt->serializingSessionId() ||
+         session->getId() == _agentSaveAttempt->authoritySessionId()))
+    {
+        if (const auto serializingSession = _agentSaveAttempt->serializingSession())
+            serializingSession->rejectSaveResponse(_agentSaveAttempt->saveRequestId());
+        abandonAgentSaveAttempt("agent authority or serializing session removed");
+        if (_docState.activity() == DocumentState::Activity::Save)
+        {
+            _saveManager.setLastSaveResult(/*success=*/false, /*newVersion=*/false);
+            endActivity();
+        }
+        broadcastSaveResult(false, "Agent save session closed");
+    }
 
     // Cancel any pending token refresh for this session.
     if (session->isRefreshingToken())
@@ -5665,20 +5881,54 @@ void DocumentBroker::handleAgentSaveRequest(const std::shared_ptr<StreamSocket>&
         return;
     }
 
-    if (!agentSession->isLive())
-    {
-        HttpHelper::sendErrorAndShutdown(http::StatusCode::Conflict, socket);
-        return;
-    }
-
     if (!agentSession->isWritable())
     {
         HttpHelper::sendErrorAndShutdown(http::StatusCode::Forbidden, socket);
         return;
     }
 
-    if (!manualSave(agentSession, /*dontTerminateEdit=*/true,
-                    /*dontSaveIfUnmodified=*/false, operationId))
+    if (!agentSession->isAgentSaveEligible())
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Conflict, socket);
+        return;
+    }
+
+    if (agentSession->getDocumentBroker().get() != this)
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Unauthorized, socket);
+        return;
+    }
+
+    if (_agentSaveAttempt)
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Conflict, socket);
+        return;
+    }
+
+    std::shared_ptr<ClientSession> savingSession;
+    for (const auto& sessionEntry : _sessions)
+    {
+        const std::shared_ptr<ClientSession>& session = sessionEntry.second;
+        if (!session->isWebsocketUrpEnabled() && session->isLive() &&
+            session->isWritable() &&
+            session->getDocumentBroker().get() == this &&
+            session->getAuthorization().isValid())
+        {
+            savingSession = session;
+            break;
+        }
+    }
+
+    if (!savingSession)
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Conflict, socket);
+        return;
+    }
+
+    if (!manualSave(savingSession, /*dontTerminateEdit=*/true,
+                    /*dontSaveIfUnmodified=*/false, operationId,
+                    /*allowBackground=*/false,
+                    /*uploadSession=*/agentSession))
     {
         HttpHelper::sendErrorAndShutdown(http::StatusCode::Conflict, socket);
         return;
@@ -6291,6 +6541,12 @@ void DocumentBroker::disconnectedFromKit(bool unexpected)
     // Always set the kit disconnected flag.
     _docState.setKitDisconnected(unexpected ? DocumentState::KitDisconnected::Unexpected
                                             : DocumentState::KitDisconnected::Normal);
+    if (_agentSaveAttempt)
+    {
+        if (const auto serializingSession = _agentSaveAttempt->serializingSession())
+            serializingSession->rejectSaveResponse(_agentSaveAttempt->saveRequestId());
+        abandonAgentSaveAttempt("Kit disconnected");
+    }
     if (_closeReason.empty())
     {
         // If we have a reason to close, no advantage in clobbering it.

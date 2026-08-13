@@ -89,6 +89,43 @@ public:
     /// from either the client or the Kit.
     bool isLive() const { return _state == SessionState::LIVE && !isCloseFrame(); }
 
+    /// Returns true iff this WOPI-authorised URP session is still attached and may request a save.
+    bool isAgentSaveEligible() const
+    {
+        return _websocketUrpEnabled && isWritable() &&
+               (_state == SessionState::LOADING || _state == SessionState::LIVE) &&
+               !_docBroker.expired() && !isCloseFrame() && _auth.isValid();
+    }
+
+    struct SaveResponseCorrelation
+    {
+        std::size_t requestId;
+        bool rejected;
+    };
+
+    /// Core does not return a request ID, so only one unresolved save may exist per view.
+    bool canRegisterSaveRequest() const { return !_saveResponseCorrelation; }
+    std::size_t registerSaveRequest()
+    {
+        assert(canRegisterSaveRequest());
+        const std::size_t requestId = ++_lastSaveRequestId;
+        _saveResponseCorrelation.emplace(requestId, false);
+        return requestId;
+    }
+    void rejectSaveResponse(const std::size_t requestId)
+    {
+        if (_saveResponseCorrelation && _saveResponseCorrelation->first == requestId)
+            _saveResponseCorrelation->second = true;
+    }
+    std::optional<SaveResponseCorrelation> consumeSaveResponse()
+    {
+        if (!_saveResponseCorrelation)
+            return std::nullopt;
+        const auto correlation = *_saveResponseCorrelation;
+        _saveResponseCorrelation.reset();
+        return SaveResponseCorrelation{ correlation.first, correlation.second };
+    }
+
     /// Handle kit-to-client message.
     bool handleKitToClientMessage(const std::shared_ptr<Message>& payload);
 
@@ -606,6 +643,10 @@ private:
 
     /// Whether the WOPI host authorised this session to own the WebSocket URP bridge.
     bool _websocketUrpEnabled;
+
+    /// Core returns no save request ID. Keep the unresolved request until its response arrives.
+    std::size_t _lastSaveRequestId = 0;
+    std::optional<std::pair<std::size_t, bool>> _saveResponseCorrelation;
 
     /// If it is allowed to try to switch from read-only to edit mode,
     /// because it's read-only just because of transient lock failure.

@@ -6,7 +6,7 @@
 # -- Available env vars --
 # * DOCKER_HUB_REPO - which Docker Hub repo to use
 # * DOCKER_HUB_TAG  - which Docker Hub tag to create
-# * ENGINE_ASSETS  - URL of prebuilt engine assets tarball (skips building engine from source)
+# * COLLABORA_ONLINE_REVISION - exact Kreoh source revision to build
 # * COLLABORA_ONLINE_REPO - which git repo to clone the online monorepo from
 # * COLLABORA_ONLINE_BRANCH - which branch to build
 # * ENGINE_BUILD_TARGET - which make target to run for the engine (when building from source)
@@ -23,18 +23,21 @@ fi;
 echo "Using Docker Hub Repository: '$DOCKER_HUB_REPO' with tag '$DOCKER_HUB_TAG'."
 
 if [ -z "$COLLABORA_ONLINE_REPO" ]; then
-  COLLABORA_ONLINE_REPO="https://gerrit.collaboraoffice.com/online"
+  COLLABORA_ONLINE_REPO="https://github.com/Kreoh/online.mirror.git"
 fi;
 if [ -z "$COLLABORA_ONLINE_BRANCH" ]; then
   COLLABORA_ONLINE_BRANCH="main"
 fi;
-echo "Building branch '$COLLABORA_ONLINE_BRANCH' from '$COLLABORA_ONLINE_REPO'"
-
-if [ -z "$ENGINE_ASSETS" ]; then
-  echo "Building engine from source"
-else
-  echo "Using prebuilt engine assets from $ENGINE_ASSETS"
+if [ -z "$COLLABORA_ONLINE_REVISION" ]; then
+  COLLABORA_ONLINE_REVISION="9b56f5583ab8df2202fb0b8471dcbf622d7825f8"
 fi;
+echo "Building exact revision '$COLLABORA_ONLINE_REVISION' from '$COLLABORA_ONLINE_REPO'"
+
+if [ -n "${ENGINE_ASSETS:-}" ]; then
+  echo "ENGINE_ASSETS is prohibited: build the document engine from Kreoh source." >&2
+  exit 1
+fi;
+echo "Building engine from source"
 
 if [ -z "$ENGINE_BUILD_TARGET" ]; then
   ENGINE_BUILD_TARGET=""
@@ -77,28 +80,12 @@ if test ! -d online ; then
   git clone --depth=1 --branch "$COLLABORA_ONLINE_BRANCH" "$COLLABORA_ONLINE_REPO" online || exit 1
 fi
 
-( cd online && git fetch --all && git checkout -f $COLLABORA_ONLINE_BRANCH && git clean -f -d && git pull -r ) || exit 1
-
-
-# brand repo
-if test ! -d online-branding ; then
-  git clone git@gitlab.collabora.com:productivity/online-branding.git online-branding || echo "Could not clone this proprietary repo"
-fi
-
-if test -d online-branding ; then
-  ( cd online-branding && git pull -r ) || exit 1
-fi
+( cd online && git fetch origin "$COLLABORA_ONLINE_REVISION" && git checkout --detach -f "$COLLABORA_ONLINE_REVISION" && git clean -f -d && test "$(git rev-parse HEAD)" = "$COLLABORA_ONLINE_REVISION" ) || exit 1
 
 ##### engine #####
 
-if [ -z "$ENGINE_ASSETS" ]; then
-  # build engine from source
-  ( cd online/engine && ./autogen.sh --with-distro=CPLinux-LOKit --disable-epm --without-package-format --disable-symbols ) || exit 1
-  ( cd online/engine && make $ENGINE_BUILD_TARGET ) || exit 1
-else
-  # drop in prebuilt engine assets
-  ( cd online/engine && wget "$ENGINE_ASSETS" -O engine-assets.tar.xz && tar -xzf engine-assets.tar.xz && rm engine-assets.tar.xz ) || exit 1
-fi
+( cd online/engine && ./autogen.sh --with-distro=CPLinux-LOKit --disable-epm --without-package-format --disable-symbols ) || exit 1
+( cd online/engine && make $ENGINE_BUILD_TARGET ) || exit 1
 
 # copy stuff
 mkdir -p "$INSTDIR"/opt/
@@ -114,14 +101,6 @@ cp -a online/engine/instdir "$INSTDIR"/opt/collaboraoffice
 # copy stuff
 ( cd online && DESTDIR="$INSTDIR" make install ) || exit 1
 
-##### online branding #####
-if test -d online-branding ; then
-  if ! which sass &> /dev/null; then npm install -g sass; fi
-  cd online-branding
-  ./brand.sh $INSTDIR/opt/collaboraoffice $INSTDIR/usr/share/coolwsd/browser/dist CODE # CODE
-  ./brand.sh $INSTDIR/opt/collaboraoffice $INSTDIR/usr/share/coolwsd/browser/dist NC-theme-community # Nextcloud Office
-  cd ..
-fi
 
 # Create new docker image
 if [ -z "$NO_DOCKER_IMAGE" ]; then

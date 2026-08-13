@@ -585,7 +585,9 @@ public:
 
     /// User wants to issue a save on the document.
     bool manualSave(const std::shared_ptr<ClientSession>& session, bool dontTerminateEdit,
-                    bool dontSaveIfUnmodified, const std::string& extendedData);
+                    bool dontSaveIfUnmodified, const std::string& extendedData,
+                    bool allowBackground = true,
+                    const std::shared_ptr<ClientSession>& uploadSession = nullptr);
 
     /// Sends a message to all sessions.
     /// Returns the number of sessions sent the message to.
@@ -899,13 +901,18 @@ private:
     /// Handles the completion of failed uploading to storage.
     void handleUploadToStorageFailed(const StorageBase::UploadResult& uploadResult);
 
+    /// Ends an agent save without allowing its local file version to use browser retry authority.
+    void abandonAgentSaveAttempt(std::string_view reason);
+
     /// Send the error message about failed upload
     void reportUploadToStorageFailed(std::string_view reason = {});
 
     /// Sends the .uno:Save command to LoKit.
     bool sendUnoSave(const std::shared_ptr<ClientSession>& session, bool dontTerminateEdit = true,
                      bool dontSaveIfUnmodified = true, bool isAutosave = false, bool finalWrite = false,
-                     const std::string& extendedData = std::string());
+                     const std::string& extendedData = std::string(),
+                     bool allowBackground = true,
+                     const std::shared_ptr<ClientSession>& uploadSession = nullptr);
 
     /**
      * Report back the save result to PostMessage users (Action_Save_Resp)
@@ -1444,6 +1451,62 @@ private:
         bool _completed;
     };
 
+    /// One operation-marked agent save from Core serialisation through WOPI upload.
+    class AgentSaveAttempt final
+    {
+    public:
+        enum class Phase
+        {
+            AwaitingSaveResponse,
+            Uploading
+        };
+
+        AgentSaveAttempt(const std::shared_ptr<ClientSession>& serializingSession,
+                         const std::shared_ptr<ClientSession>& authoritySession,
+                         std::string serializingSessionId, std::string authoritySessionId,
+                         std::string operationId, std::size_t saveRequestId,
+                         std::chrono::steady_clock::time_point saveRequestTime)
+            : _serializingSession(serializingSession)
+            , _authoritySession(authoritySession)
+            , _serializingSessionId(std::move(serializingSessionId))
+            , _authoritySessionId(std::move(authoritySessionId))
+            , _operationId(std::move(operationId))
+            , _saveRequestId(saveRequestId)
+            , _saveRequestTime(saveRequestTime)
+            , _phase(Phase::AwaitingSaveResponse)
+        {
+        }
+
+        std::shared_ptr<ClientSession> serializingSession() const
+        {
+            return _serializingSession.lock();
+        }
+        std::shared_ptr<ClientSession> authoritySession() const
+        {
+            return _authoritySession.lock();
+        }
+        const std::string& serializingSessionId() const { return _serializingSessionId; }
+        const std::string& authoritySessionId() const { return _authoritySessionId; }
+        const std::string& operationId() const { return _operationId; }
+        std::size_t saveRequestId() const { return _saveRequestId; }
+        std::chrono::steady_clock::time_point saveRequestTime() const
+        {
+            return _saveRequestTime;
+        }
+        Phase phase() const { return _phase; }
+        void startUploading() { _phase = Phase::Uploading; }
+
+    private:
+        const std::weak_ptr<ClientSession> _serializingSession;
+        const std::weak_ptr<ClientSession> _authoritySession;
+        const std::string _serializingSessionId;
+        const std::string _authoritySessionId;
+        const std::string _operationId;
+        const std::size_t _saveRequestId;
+        const std::chrono::steady_clock::time_point _saveRequestTime;
+        Phase _phase;
+    };
+
     /// Responsible for managing document uploading into storage.
     class StorageManager final
     {
@@ -1897,6 +1960,10 @@ private:
     /// The last upload request's attributes. Re-used to retry after failure.
     /// Updated right before uploading.
     StorageBase::Attributes _lastStorageAttrs;
+    /// The sole operation-marked agent save currently awaiting a response or upload.
+    std::optional<AgentSaveAttempt> _agentSaveAttempt;
+    /// Exact local version from a failed agent upload, excluded from generic retry.
+    std::optional<std::chrono::system_clock::time_point> _agentSaveNoRetryFileTime;
 
     /// URL-based key. May be repeated during the lifetime of WSD.
     const std::string _docKey;

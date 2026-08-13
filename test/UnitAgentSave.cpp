@@ -20,8 +20,10 @@
 #include <test/WopiTestServer.hpp>
 #include <test/helpers.hpp>
 #include <test/lokassert.hpp>
+#include <wsd/ClientSession.hpp>
 
 #include <Poco/JSON/Object.h>
+#include <Poco/Util/LayeredConfiguration.h>
 
 #include <functional>
 #include <memory>
@@ -31,6 +33,7 @@
 namespace
 {
 constexpr std::string_view AgentToken = "agent-save-token";
+constexpr std::string_view BrowserToken = "browser-token";
 constexpr std::string_view OperationId = "agent-operation-42";
 
 class AgentSaveTestBase : public WopiTestServer
@@ -46,6 +49,15 @@ protected:
     requestAgentSave(const std::string_view bearerToken, const std::string_view operationId,
                      std::function<void(const std::shared_ptr<http::Session>&)> finishedHandler)
     {
+        requestAgentSaveForWopiSrc(getWopiSrc(), bearerToken, operationId,
+                                   std::move(finishedHandler));
+    }
+
+    void requestAgentSaveForWopiSrc(
+        const std::string& wopiSrc, const std::string_view bearerToken,
+        const std::string_view operationId,
+        std::function<void(const std::shared_ptr<http::Session>&)> finishedHandler)
+    {
         _controlSession = http::Session::create(helpers::getTestServerURI());
         LOK_ASSERT(_controlSession);
 
@@ -54,7 +66,7 @@ protected:
             [this](const std::shared_ptr<http::Session>&)
             { LOK_ASSERT_FAIL("Agent save control request failed to connect"); });
 
-        http::Request request("/cool/agent/save?WOPISrc=" + getWopiSrc(), http::Request::VERB_POST);
+        http::Request request("/cool/agent/save?WOPISrc=" + wopiSrc, http::Request::VERB_POST);
         request.set("Authorization", "Bearer " + std::string(bearerToken));
         request.set("X-COOL-Agent-Operation-Id", std::string(operationId));
         request.setContentLength(0);
@@ -68,26 +80,33 @@ private:
 
 class UnitAgentSave final : public AgentSaveTestBase
 {
-    STATE_ENUM(Phase, Load, WaitLoadStatus, WaitModifiedStatus, WaitRejected, WaitAccepted,
-               WaitPutFile, Done)
+    STATE_ENUM(Phase, LoadBrowser, WaitBrowserLoad, WaitModifiedStatus, WaitAgentAttached,
+               WaitWrongDocument, WaitRejected, WaitAccepted, WaitOverlapRejected, WaitPutFile,
+               Done)
     _phase;
 
 public:
     UnitAgentSave()
         : AgentSaveTestBase("UnitAgentSave")
-        , _phase(Phase::Load)
+        , _phase(Phase::LoadBrowser)
     {
     }
 
-    void configCheckFileInfo(const Poco::Net::HTTPRequest&,
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        config.setBool("security.enable_websocket_urp", true);
+    }
+
+    void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
                              Poco::JSON::Object::Ptr& fileInfo) override
     {
-        fileInfo->set("EnableWebsocketURP", true);
+        if (request.getURI().find(AgentToken) != std::string::npos)
+            fileInfo->set("EnableWebsocketURP", true);
     }
 
     bool onDocumentLoaded(const std::string&) override
     {
-        LOK_ASSERT_STATE(_phase, Phase::WaitLoadStatus);
+        LOK_ASSERT_STATE(_phase, Phase::WaitBrowserLoad);
         TRANSITION_STATE(_phase, Phase::WaitModifiedStatus);
 
         WSD_CMD("key type=input char=97 key=0");
@@ -100,26 +119,93 @@ public:
         if (_phase != Phase::WaitModifiedStatus)
             return true;
 
-        TRANSITION_STATE(_phase, Phase::WaitRejected);
-        requestAgentSave(
-            "wrong-token", OperationId,
-            [this](const std::shared_ptr<http::Session>& session)
-            {
-                LOK_ASSERT(session->response());
-                LOK_ASSERT_EQUAL(http::StatusCode::Unauthorized, session->response()->statusCode());
+        TRANSITION_STATE(_phase, Phase::WaitAgentAttached);
+        initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+        WSD_CMD("load url=" + getWopiSrc());
+        return true;
+    }
 
-                TRANSITION_STATE(_phase, Phase::WaitAccepted);
-                requestAgentSave(AgentToken, OperationId,
+    void onDocBrokerAddSession(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        if (_phase != Phase::WaitAgentAttached)
+            return;
+        if (!session->isWebsocketUrpEnabled())
+        {
+            const std::size_t timedOut = session->registerSaveRequest();
+            session->rejectSaveResponse(timedOut);
+            LOK_ASSERT_MESSAGE("A timed-out response must block later saves",
+                               !session->canRegisterSaveRequest());
+            const auto lateAgent = session->consumeSaveResponse();
+            LOK_ASSERT(lateAgent);
+            LOK_ASSERT_EQUAL(timedOut, lateAgent->requestId);
+            LOK_ASSERT_MESSAGE("The timed-out agent response must be rejected",
+                               lateAgent->rejected);
+            LOK_ASSERT_MESSAGE("Consuming the late response must recover the view",
+                               session->canRegisterSaveRequest());
+            const std::size_t ordinary = session->registerSaveRequest();
+            const auto laterOrdinary = session->consumeSaveResponse();
+            LOK_ASSERT(laterOrdinary);
+            LOK_ASSERT_EQUAL(ordinary, laterOrdinary->requestId);
+            LOK_ASSERT_MESSAGE("The later ordinary response must remain accepted",
+                               !laterOrdinary->rejected);
+            const std::size_t neverReturns = session->registerSaveRequest();
+            session->rejectSaveResponse(neverReturns);
+            LOK_ASSERT_MESSAGE("A response that never arrives requires closing this view",
+                               !session->canRegisterSaveRequest());
+            return;
+        }
+
+        LOK_ASSERT_MESSAGE("The real URP agent must remain in its LOADING lifecycle",
+                           !session->isViewLoaded() && !session->isLive());
+        LOK_ASSERT_MESSAGE("The attached LOADING agent must be eligible to request a save",
+                           session->isAgentSaveEligible());
+
+        TRANSITION_STATE(_phase, Phase::WaitWrongDocument);
+        std::string wrongDocumentWopiSrc = getWopiSrc();
+        constexpr std::string_view EncodedDocumentId = "%2Ffiles%2F0";
+        const std::size_t documentId = wrongDocumentWopiSrc.find(EncodedDocumentId);
+        LOK_ASSERT(documentId != std::string::npos);
+        wrongDocumentWopiSrc.replace(documentId, EncodedDocumentId.size(),
+                                     "%2Ffiles%2Fwrong-document");
+        requestAgentSaveForWopiSrc(
+            wrongDocumentWopiSrc, AgentToken, OperationId,
+            [this](const std::shared_ptr<http::Session>& controlSession)
+            {
+                LOK_ASSERT(controlSession->response());
+                LOK_ASSERT_EQUAL(http::StatusCode::NotFound,
+                                 controlSession->response()->statusCode());
+
+                TRANSITION_STATE(_phase, Phase::WaitRejected);
+                requestAgentSave(
+                    "wrong-token", OperationId,
+                    [this](const std::shared_ptr<http::Session>& rejectedSession)
+                    {
+                        LOK_ASSERT(rejectedSession->response());
+                        LOK_ASSERT_EQUAL(http::StatusCode::Unauthorized,
+                                         rejectedSession->response()->statusCode());
+
+                        TRANSITION_STATE(_phase, Phase::WaitAccepted);
+                        requestAgentSave(AgentToken, OperationId,
                                  [this](const std::shared_ptr<http::Session>& acceptedSession)
                                  {
                                      LOK_ASSERT(acceptedSession->response());
                                      LOK_ASSERT_EQUAL(http::StatusCode::Accepted,
                                                       acceptedSession->response()->statusCode());
-                                     TRANSITION_STATE(_phase, Phase::WaitPutFile);
+                                     TRANSITION_STATE(_phase, Phase::WaitOverlapRejected);
+                                     requestAgentSave(
+                                         AgentToken, "overlapping-operation",
+                                         [this](const std::shared_ptr<http::Session>& overlapSession)
+                                         {
+                                             LOK_ASSERT(overlapSession->response());
+                                             LOK_ASSERT_EQUAL(
+                                                 http::StatusCode::Conflict,
+                                                 overlapSession->response()->statusCode());
+                                             TRANSITION_STATE(_phase, Phase::WaitPutFile);
+                                         });
                                  });
+                    });
             });
-
-        return true;
     }
 
     std::unique_ptr<http::Response>
@@ -128,6 +214,8 @@ public:
         LOK_ASSERT_STATE(_phase, Phase::WaitPutFile);
         LOK_ASSERT_EQUAL_STR(std::string(OperationId),
                              request.get("X-COOL-WOPI-ExtendedData", std::string()));
+        LOK_ASSERT_EQUAL_STR("Bearer " + std::string(AgentToken),
+                             request.get("Authorization", std::string()));
         TRANSITION_STATE(_phase, Phase::Done);
         passTest("Authorised agent save reached WOPI with its operation ID");
         return nullptr;
@@ -135,11 +223,480 @@ public:
 
     void invokeWSDTest() override
     {
-        if (_phase == Phase::Load)
+        if (_phase == Phase::LoadBrowser)
         {
-            TRANSITION_STATE(_phase, Phase::WaitLoadStatus);
-            initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+            TRANSITION_STATE(_phase, Phase::WaitBrowserLoad);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
             WSD_CMD("load url=" + getWopiSrc());
+        }
+    }
+};
+
+class UnitClosedAgentCannotSave final : public AgentSaveTestBase
+{
+    STATE_ENUM(Phase, LoadBrowser, WaitBrowserLoad, WaitAgentAttached, WaitRejected, Done) _phase;
+
+public:
+    UnitClosedAgentCannotSave()
+        : AgentSaveTestBase("UnitClosedAgentCannotSave")
+        , _phase(Phase::LoadBrowser)
+    {
+    }
+
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        config.setBool("security.enable_websocket_urp", true);
+    }
+
+    void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
+                             Poco::JSON::Object::Ptr& fileInfo) override
+    {
+        if (request.getURI().find(AgentToken) != std::string::npos)
+            fileInfo->set("EnableWebsocketURP", true);
+    }
+
+    bool onDocumentLoaded(const std::string&) override
+    {
+        LOK_ASSERT_STATE(_phase, Phase::WaitBrowserLoad);
+        TRANSITION_STATE(_phase, Phase::WaitAgentAttached);
+        initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+        WSD_CMD("load url=" + getWopiSrc());
+        return true;
+    }
+
+    void onDocBrokerAddSession(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        if (_phase != Phase::WaitAgentAttached || !session->isWebsocketUrpEnabled())
+            return;
+
+        LOK_ASSERT_MESSAGE("The attached LOADING agent must initially be eligible",
+                           session->isAgentSaveEligible());
+        session->closeFrame();
+        LOK_ASSERT_MESSAGE("A closing agent must no longer be eligible",
+                           !session->isAgentSaveEligible());
+
+        TRANSITION_STATE(_phase, Phase::WaitRejected);
+        requestAgentSave(AgentToken, OperationId,
+                         [this](const std::shared_ptr<http::Session>& controlSession)
+                         {
+                             LOK_ASSERT(controlSession->response());
+                             LOK_ASSERT_EQUAL(http::StatusCode::Conflict,
+                                              controlSession->response()->statusCode());
+                             TRANSITION_STATE(_phase, Phase::Done);
+                             passTest("A closing URP agent cannot request a save");
+                         });
+    }
+
+    void invokeWSDTest() override
+    {
+        if (_phase == Phase::LoadBrowser)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitBrowserLoad);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
+            WSD_CMD("load url=" + getWopiSrc());
+        }
+    }
+};
+
+class UnitWaitDisconnectAgentCannotSave final : public AgentSaveTestBase
+{
+    STATE_ENUM(Phase, LoadBrowser, WaitBrowserLoad, WaitAgentAttached, WaitRejected, Done) _phase;
+
+public:
+    UnitWaitDisconnectAgentCannotSave()
+        : AgentSaveTestBase("UnitWaitDisconnectAgentCannotSave")
+        , _phase(Phase::LoadBrowser)
+    {
+    }
+
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        config.setBool("security.enable_websocket_urp", true);
+    }
+
+    void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
+                             Poco::JSON::Object::Ptr& fileInfo) override
+    {
+        if (request.getURI().find(AgentToken) != std::string::npos)
+            fileInfo->set("EnableWebsocketURP", true);
+    }
+
+    bool onDocumentLoaded(const std::string&) override
+    {
+        LOK_ASSERT_STATE(_phase, Phase::WaitBrowserLoad);
+        TRANSITION_STATE(_phase, Phase::WaitAgentAttached);
+        initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+        WSD_CMD("load url=" + getWopiSrc());
+        return true;
+    }
+
+    void onDocBrokerAddSession(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        if (_phase != Phase::WaitAgentAttached || !session->isWebsocketUrpEnabled())
+            return;
+
+        LOK_ASSERT_MESSAGE("The attached LOADING agent must initially be eligible",
+                           session->isAgentSaveEligible());
+        LOK_ASSERT_MESSAGE("A LOADING agent must enter WAIT_DISCONNECT through Kit lifecycle",
+                           !session->disconnectFromKit());
+        LOK_ASSERT_MESSAGE("A WAIT_DISCONNECT agent must no longer be eligible",
+                           session->inWaitDisconnected() && !session->isAgentSaveEligible());
+
+        TRANSITION_STATE(_phase, Phase::WaitRejected);
+        requestAgentSave(AgentToken, OperationId,
+                         [this](const std::shared_ptr<http::Session>& controlSession)
+                         {
+                             LOK_ASSERT(controlSession->response());
+                             LOK_ASSERT_EQUAL(http::StatusCode::Conflict,
+                                              controlSession->response()->statusCode());
+                             TRANSITION_STATE(_phase, Phase::Done);
+                             passTest("A WAIT_DISCONNECT URP agent cannot request a save");
+                         });
+    }
+
+    void invokeWSDTest() override
+    {
+        if (_phase == Phase::LoadBrowser)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitBrowserLoad);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
+            WSD_CMD("load url=" + getWopiSrc());
+        }
+    }
+};
+
+class UnitAgentExpiryDuringSave final : public AgentSaveTestBase
+{
+    STATE_ENUM(Phase, LoadBrowser, WaitBrowserLoad, WaitModifiedStatus, WaitAgentAttached,
+               WaitAccepted, WaitSaveResult, WaitNoUpload, WaitOrdinaryPutFile, Done)
+    _phase;
+    std::weak_ptr<ClientSession> _agentSession;
+    std::chrono::steady_clock::time_point _ordinarySaveAfter;
+
+public:
+    UnitAgentExpiryDuringSave()
+        : AgentSaveTestBase("UnitAgentExpiryDuringSave")
+        , _phase(Phase::LoadBrowser)
+    {
+    }
+
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        config.setBool("security.enable_websocket_urp", true);
+    }
+
+    void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
+                             Poco::JSON::Object::Ptr& fileInfo) override
+    {
+        if (request.getURI().find(AgentToken) != std::string::npos)
+            fileInfo->set("EnableWebsocketURP", true);
+    }
+
+    bool onDocumentLoaded(const std::string&) override
+    {
+        LOK_ASSERT_STATE(_phase, Phase::WaitBrowserLoad);
+        TRANSITION_STATE(_phase, Phase::WaitModifiedStatus);
+        WSD_CMD("key type=input char=97 key=0");
+        WSD_CMD("key type=up char=0 key=512");
+        return true;
+    }
+
+    bool onDocumentModified(const std::string&) override
+    {
+        if (_phase != Phase::WaitModifiedStatus)
+            return true;
+
+        TRANSITION_STATE(_phase, Phase::WaitAgentAttached);
+        initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+        WSD_CMD("load url=" + getWopiSrc());
+        return true;
+    }
+
+    void onDocBrokerAddSession(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        if (_phase != Phase::WaitAgentAttached || !session->isWebsocketUrpEnabled())
+            return;
+
+        _agentSession = session;
+        TRANSITION_STATE(_phase, Phase::WaitAccepted);
+        requestAgentSave(AgentToken, OperationId,
+                         [this](const std::shared_ptr<http::Session>& controlSession)
+                         {
+                             LOK_ASSERT(controlSession->response());
+                             LOK_ASSERT_EQUAL(http::StatusCode::Accepted,
+                                              controlSession->response()->statusCode());
+                             TRANSITION_STATE(_phase, Phase::WaitSaveResult);
+                         });
+    }
+
+    bool filterChildMessage(const std::vector<char>& payload) override
+    {
+        if (_phase != Phase::WaitSaveResult)
+            return false;
+
+        const std::string message(payload.data(), payload.size());
+        if (message.find("unocommandresult:") == std::string::npos ||
+            message.find(".uno:Save") == std::string::npos)
+            return false;
+
+        const auto agentSession = _agentSession.lock();
+        LOK_ASSERT(agentSession);
+        agentSession->invalidateAuthorizationToken();
+        return false;
+    }
+
+    bool onDocumentSaved(const std::string&, bool, const std::string&) override
+    {
+        if (_phase != Phase::WaitSaveResult)
+            return false;
+
+        _ordinarySaveAfter = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+        TRANSITION_STATE(_phase, Phase::WaitNoUpload);
+        return true;
+    }
+
+    std::unique_ptr<http::Response> assertPutFileRequest(
+        const Poco::Net::HTTPRequest& request) override
+    {
+        LOK_ASSERT_STATE(_phase, Phase::WaitOrdinaryPutFile);
+        LOK_ASSERT_MESSAGE("A later ordinary save must not inherit the agent operation marker",
+                           !request.has("X-COOL-WOPI-ExtendedData"));
+        TRANSITION_STATE(_phase, Phase::Done);
+        passTest("Expired agent version stayed blocked and a later ordinary save uploaded");
+        return nullptr;
+    }
+
+    void invokeWSDTest() override
+    {
+        if (_phase == Phase::LoadBrowser)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitBrowserLoad);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
+            WSD_CMD("load url=" + getWopiSrc());
+        }
+        else if (_phase == Phase::WaitNoUpload &&
+                 std::chrono::steady_clock::now() >= _ordinarySaveAfter)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitOrdinaryPutFile);
+            WSD_CMD_BY_CONNECTION_INDEX(0, "key type=input char=98 key=0");
+            WSD_CMD_BY_CONNECTION_INDEX(0, "key type=up char=0 key=512");
+            WSD_CMD_BY_CONNECTION_INDEX(
+                0, "save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+        }
+    }
+};
+
+class UnitAgentCoreSaveFailure final : public AgentSaveTestBase
+{
+    STATE_ENUM(Phase, LoadBrowser, WaitBrowserLoad, WaitModifiedStatus, WaitAgentAttached,
+               WaitAccepted, WaitSaveResult, Done)
+    _phase;
+    std::weak_ptr<ClientSession> _browserSession;
+
+public:
+    UnitAgentCoreSaveFailure()
+        : AgentSaveTestBase("UnitAgentCoreSaveFailure")
+        , _phase(Phase::LoadBrowser)
+    {
+    }
+
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        config.setBool("security.enable_websocket_urp", true);
+    }
+
+    void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
+                             Poco::JSON::Object::Ptr& fileInfo) override
+    {
+        if (request.getURI().find(AgentToken) != std::string::npos)
+            fileInfo->set("EnableWebsocketURP", true);
+    }
+
+    bool onDocumentLoaded(const std::string&) override
+    {
+        LOK_ASSERT_STATE(_phase, Phase::WaitBrowserLoad);
+        TRANSITION_STATE(_phase, Phase::WaitModifiedStatus);
+        WSD_CMD("key type=input char=97 key=0");
+        WSD_CMD("key type=up char=0 key=512");
+        return true;
+    }
+
+    bool onDocumentModified(const std::string&) override
+    {
+        if (_phase != Phase::WaitModifiedStatus)
+            return true;
+
+        TRANSITION_STATE(_phase, Phase::WaitAgentAttached);
+        initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+        WSD_CMD("load url=" + getWopiSrc());
+        return true;
+    }
+
+    void onDocBrokerAddSession(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        if (!session->isWebsocketUrpEnabled())
+        {
+            _browserSession = session;
+            return;
+        }
+        if (_phase != Phase::WaitAgentAttached)
+            return;
+
+        TRANSITION_STATE(_phase, Phase::WaitAccepted);
+        requestAgentSave(AgentToken, OperationId,
+                         [this](const std::shared_ptr<http::Session>& controlSession)
+                         {
+                             LOK_ASSERT(controlSession->response());
+                             LOK_ASSERT_EQUAL(http::StatusCode::Accepted,
+                                              controlSession->response()->statusCode());
+                             TRANSITION_STATE(_phase, Phase::WaitSaveResult);
+                         });
+    }
+
+    bool filterChildMessage(const std::vector<char>& payload) override
+    {
+        if (_phase != Phase::WaitSaveResult)
+            return false;
+
+        const std::string message(payload.data(), payload.size());
+        if (message.find("unocommandresult:") == std::string::npos ||
+            message.find(".uno:Save") == std::string::npos)
+            return false;
+
+        const auto browserSession = _browserSession.lock();
+        LOK_ASSERT(browserSession);
+        Poco::JSON::Object::Ptr failure = new Poco::JSON::Object();
+        failure->set("commandName", ".uno:Save");
+        failure->set("success", false);
+        browserSession->getDocumentBroker()->handleSaveResponse(browserSession, failure);
+        TRANSITION_STATE(_phase, Phase::Done);
+        passTest("A failed Core save produced no agent PutFile");
+        return true;
+    }
+
+    std::unique_ptr<http::Response>
+    assertPutFileRequest(const Poco::Net::HTTPRequest&) override
+    {
+        LOK_ASSERT_FAIL("A failed Core save must not issue PutFile");
+    }
+
+    void invokeWSDTest() override
+    {
+        if (_phase == Phase::LoadBrowser)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitBrowserLoad);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
+            WSD_CMD("load url=" + getWopiSrc());
+        }
+    }
+};
+
+class UnitAgentUploadFailure final : public AgentSaveTestBase
+{
+    STATE_ENUM(Phase, LoadBrowser, WaitBrowserLoad, WaitModifiedStatus, WaitAgentAttached,
+               WaitAccepted, WaitPutFile, WaitFailure, WaitNoRetry, Done)
+    _phase;
+    std::chrono::steady_clock::time_point _failureTime;
+
+public:
+    UnitAgentUploadFailure()
+        : AgentSaveTestBase("UnitAgentUploadFailure")
+        , _phase(Phase::LoadBrowser)
+    {
+    }
+
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        config.setBool("security.enable_websocket_urp", true);
+    }
+
+    void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
+                             Poco::JSON::Object::Ptr& fileInfo) override
+    {
+        if (request.getURI().find(AgentToken) != std::string::npos)
+            fileInfo->set("EnableWebsocketURP", true);
+    }
+
+    bool onDocumentLoaded(const std::string&) override
+    {
+        LOK_ASSERT_STATE(_phase, Phase::WaitBrowserLoad);
+        TRANSITION_STATE(_phase, Phase::WaitModifiedStatus);
+        WSD_CMD("key type=input char=97 key=0");
+        WSD_CMD("key type=up char=0 key=512");
+        return true;
+    }
+
+    bool onDocumentModified(const std::string&) override
+    {
+        if (_phase != Phase::WaitModifiedStatus)
+            return true;
+
+        TRANSITION_STATE(_phase, Phase::WaitAgentAttached);
+        initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+        WSD_CMD("load url=" + getWopiSrc());
+        return true;
+    }
+
+    void onDocBrokerAddSession(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        if (_phase != Phase::WaitAgentAttached || !session->isWebsocketUrpEnabled())
+            return;
+
+        TRANSITION_STATE(_phase, Phase::WaitAccepted);
+        requestAgentSave(AgentToken, OperationId,
+                         [this](const std::shared_ptr<http::Session>& controlSession)
+                         {
+                             LOK_ASSERT(controlSession->response());
+                             LOK_ASSERT_EQUAL(http::StatusCode::Accepted,
+                                              controlSession->response()->statusCode());
+                             TRANSITION_STATE(_phase, Phase::WaitPutFile);
+                         });
+    }
+
+    std::unique_ptr<http::Response>
+    assertPutFileRequest(const Poco::Net::HTTPRequest& request) override
+    {
+        if (_phase != Phase::WaitPutFile)
+            LOK_ASSERT_FAIL("A failed operation-marked PutFile must never be retried");
+
+        LOK_ASSERT_EQUAL_STR(std::string(OperationId),
+                             request.get("X-COOL-WOPI-ExtendedData", std::string()));
+        LOK_ASSERT_EQUAL_STR("Bearer " + std::string(AgentToken),
+                             request.get("Authorization", std::string()));
+        TRANSITION_STATE(_phase, Phase::WaitFailure);
+        return std::make_unique<http::Response>(http::StatusCode::Unauthorized);
+    }
+
+    bool onDocumentError(const std::string& message) override
+    {
+        if (_phase != Phase::WaitFailure)
+            return false;
+
+        LOK_ASSERT_MESSAGE("The failed agent upload must report saveunauthorized",
+                           message.starts_with("error: cmd=storage kind=saveunauthorized"));
+        _failureTime = std::chrono::steady_clock::now();
+        TRANSITION_STATE(_phase, Phase::WaitNoRetry);
+        return true;
+    }
+
+    void invokeWSDTest() override
+    {
+        if (_phase == Phase::LoadBrowser)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitBrowserLoad);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
+            WSD_CMD("load url=" + getWopiSrc());
+        }
+        else if (_phase == Phase::WaitNoRetry &&
+                 std::chrono::steady_clock::now() - _failureTime > std::chrono::seconds(3))
+        {
+            TRANSITION_STATE(_phase, Phase::Done);
+            passTest("A failed agent PutFile was not refreshed or retried with browser authority");
         }
     }
 };
@@ -186,7 +743,12 @@ public:
 
 UnitBase** unit_create_wsd_multi(void)
 {
-    return new UnitBase* [] { new UnitAgentSave(), new UnitBrowserCannotAgentSave(), nullptr };
+    return new UnitBase* [] { new UnitAgentSave(), new UnitClosedAgentCannotSave(),
+                             new UnitWaitDisconnectAgentCannotSave(),
+                             new UnitAgentExpiryDuringSave(),
+                             new UnitAgentCoreSaveFailure(),
+                             new UnitAgentUploadFailure(),
+                             new UnitBrowserCannotAgentSave(), nullptr };
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
