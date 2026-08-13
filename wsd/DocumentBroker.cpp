@@ -5640,6 +5640,53 @@ void DocumentBroker::handleClipboardRequest(ClipboardRequest type, const std::sh
         LOG_ERR("Could not find matching session to handle clipboard request for " << viewId << " tag: " << tag);
 }
 
+void DocumentBroker::handleAgentSaveRequest(const std::shared_ptr<StreamSocket>& socket,
+                                            const std::string_view bearerToken,
+                                            const std::string& operationId)
+{
+    ASSERT_CORRECT_THREAD();
+
+    std::shared_ptr<ClientSession> agentSession;
+    for (const auto& sessionEntry : _sessions)
+    {
+        const std::shared_ptr<ClientSession>& session = sessionEntry.second;
+        if (session->isWebsocketUrpEnabled() &&
+            session->getAuthorization().matchesToken(bearerToken))
+        {
+            agentSession = session;
+            break;
+        }
+    }
+
+    if (!agentSession)
+    {
+        LOG_WRN("Rejecting agent save request without a matching authorised live session");
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Unauthorized, socket);
+        return;
+    }
+
+    if (!agentSession->isLive())
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Conflict, socket);
+        return;
+    }
+
+    if (!agentSession->isWritable())
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Forbidden, socket);
+        return;
+    }
+
+    if (!manualSave(agentSession, /*dontTerminateEdit=*/true,
+                    /*dontSaveIfUnmodified=*/false, operationId))
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Conflict, socket);
+        return;
+    }
+
+    HttpHelper::sendErrorAndShutdown(http::StatusCode::Accepted, socket);
+}
+
 void DocumentBroker::handleMediaRequest(const std::string_view range,
                                         const std::shared_ptr<Socket>& socket,
                                         const std::string& tag,

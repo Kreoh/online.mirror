@@ -75,6 +75,7 @@
 #include <Poco/StreamCopier.h>
 
 #include <algorithm>
+#include <cctype>
 #include <map>
 #include <memory>
 #include <string>
@@ -1388,6 +1389,11 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
             servedSync = handleClipboardRequest(request, message, disposition, socket);
         }
         else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
+                 requestDetails.equals(1, "agent") && requestDetails.equals(2, "save"))
+        {
+            servedSync = handleAgentSaveRequest(request, disposition, socket);
+        }
+        else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
                  requestDetails.equals(1, "signature"))
         {
             servedSync = handleSignatureRequest(request, socket);
@@ -2210,6 +2216,88 @@ bool ClientRequestDispatcher::handleClipboardRequest(const Poco::Net::HTTPReques
         HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket, errMsg);
         return true;
     }
+    return false;
+}
+
+bool ClientRequestDispatcher::handleAgentSaveRequest(const Poco::Net::HTTPRequest& request,
+                                                     SocketDisposition& disposition,
+                                                     const std::shared_ptr<StreamSocket>& socket)
+{
+    assert(socket && "Must have a valid socket");
+
+    if (request.getMethod() != Poco::Net::HTTPRequest::HTTP_POST)
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::MethodNotAllowed, socket);
+        return true;
+    }
+
+    Poco::URI requestUri(request.getURI());
+    std::string wopiSrc;
+    for (const auto& parameter : requestUri.getQueryParameters())
+    {
+        if (parameter.first == "WOPISrc")
+        {
+            wopiSrc = parameter.second;
+            break;
+        }
+    }
+
+    if (wopiSrc.empty() || !HttpHelper::verifyWOPISrc(request.getURI(), wopiSrc, socket))
+    {
+        if (wopiSrc.empty())
+            HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket);
+        return true;
+    }
+
+    static constexpr std::string_view bearerPrefix = "Bearer ";
+    const std::string authorization = request.get("Authorization", std::string());
+    if (!authorization.starts_with(bearerPrefix) || authorization.size() == bearerPrefix.size())
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Unauthorized, socket);
+        return true;
+    }
+
+    const std::string operationId = request.get("X-COOL-Agent-Operation-Id", std::string());
+    const bool validOperationId = !operationId.empty() && operationId.size() <= 128 &&
+                                  std::all_of(operationId.begin(), operationId.end(),
+                                              [](char ch)
+                                              {
+                                                  const unsigned char value =
+                                                      static_cast<unsigned char>(ch);
+                                                  return std::isalnum(value) || ch == '-' ||
+                                                         ch == '_' || ch == '.' || ch == ':';
+                                              });
+    if (!validOperationId)
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket);
+        return true;
+    }
+
+    const std::string docKey = RequestDetails::getDocKey(wopiSrc);
+    std::shared_ptr<DocumentBroker> docBroker;
+    {
+        std::unique_lock<std::mutex> docBrokersLock(DocBrokersMutex);
+        const auto broker = DocBrokers.find(docKey);
+        if (broker != DocBrokers.end())
+            docBroker = broker->second;
+    }
+
+    if (!docBroker || !docBroker->isAlive())
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::NotFound, socket);
+        return true;
+    }
+
+    const std::string bearerToken = authorization.substr(bearerPrefix.size());
+    docBroker->setupTransfer(
+        disposition,
+        [docBroker, bearerToken, operationId](const std::shared_ptr<Socket>& transferredSocket)
+        {
+            docBroker->handleAgentSaveRequest(
+                std::static_pointer_cast<StreamSocket>(transferredSocket), bearerToken,
+                operationId);
+        });
+
     return false;
 }
 

@@ -46,6 +46,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -512,6 +513,10 @@ public:
     void handleClipboardRequest(ClipboardRequest type,  const std::shared_ptr<StreamSocket> &socket,
                                 const std::string &viewId, const std::string &tag,
                                 const std::string &clipFile);
+
+    /// Starts a manual save for the live agent session authenticated by bearerToken.
+    void handleAgentSaveRequest(const std::shared_ptr<StreamSocket>& socket,
+                                std::string_view bearerToken, const std::string& operationId);
     static bool handlePersistentClipboardRequest(ClipboardRequest type,
                                                  const std::shared_ptr<StreamSocket> &socket,
                                                  const std::string &tag, bool sendError = false);

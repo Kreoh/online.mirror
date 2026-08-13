@@ -96,6 +96,7 @@ all_la_unit_tests = \
 	unit-rendering-options.la \
 	unit-prefork.la \
 	unit-any-input.la \
+	unit-agent-save.la \
 	unit-save.la \
 	unit-wopi-saveas.la \
 	unit-typing.la \
@@ -386,6 +387,8 @@ unit_save_la_SOURCES = UnitSave.cpp
 unit_save_la_LIBADD = $(CPPUNIT_LIBS)
 unit_any_input_la_SOURCES = UnitAnyInput.cpp
 unit_any_input_la_LIBADD = $(CPPUNIT_LIBS)
+unit_agent_save_la_SOURCES = UnitAgentSave.cpp
+unit_agent_save_la_LIBADD = $(CPPUNIT_LIBS)
 unit_kit_child_session_la_SOURCES = UnitKitChildSession.cpp
 unit_kit_child_session_la_LIBADD = $(CPPUNIT_LIBS)
 unit_large_paste_la_SOURCES = UnitLargePaste.cpp

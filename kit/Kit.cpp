@@ -896,6 +896,7 @@ bool Document::postMessage(const std::string_view data, const WSOpCode code) con
 bool Document::createSession(const std::string& sessionId, const bool enableWebsocketURP)
 {
 #if defined(BUILDING_TESTS)
+    (void)enableWebsocketURP;
     LOG_ERR("createSession stubbed for tests for " << sessionId);
     return false;
 #else
