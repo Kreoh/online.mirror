@@ -129,6 +129,7 @@ ClientSession::ClientSession(const std::shared_ptr<ProtocolHandlerInterface>& ws
     , _canonicalViewId(CanonicalViewId::None)
     , _state(SessionState::DETACHED)
     , _isDocumentOwner(false)
+    , _websocketUrpEnabled(false)
     , _isTextDocument(false)
     , _thumbnailSession(false)
     , _sentAudit(false)

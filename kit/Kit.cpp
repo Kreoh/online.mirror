@@ -893,7 +893,7 @@ bool Document::postMessage(const std::string_view data, const WSOpCode code) con
     return true;
 }
 
-bool Document::createSession(const std::string& sessionId)
+bool Document::createSession(const std::string& sessionId, const bool enableWebsocketURP)
 {
 #if defined(BUILDING_TESTS)
     LOG_ERR("createSession stubbed for tests for " << sessionId);
@@ -913,7 +913,7 @@ bool Document::createSession(const std::string& sessionId)
 
         auto session = std::make_shared<ChildSession>(
             _websocketHandler, sessionId,
-            _jailId, JailRoot, *this);
+            _jailId, JailRoot, *this, enableWebsocketURP);
         if (!Util::isMobileApp())
             UnitKit::get().postKitSessionCreated(session.get());
         _sessions.emplace(sessionId, session);

@@ -236,7 +236,7 @@ public:
     /// Post the message - in the unipoll world we're in the right thread anyway
     bool postMessage(const std::string_view data, WSOpCode code) const;
 
-    bool createSession(const std::string& sessionId);
+    bool createSession(const std::string& sessionId, bool enableWebsocketURP);
 
     /// Purges dead connections and returns
     /// the remaining number of clients.

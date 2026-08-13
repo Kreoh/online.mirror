@@ -80,7 +80,8 @@ public:
         const std::string& id,
         const std::string& jailId,
         const std::string& jailRoot,
-        Document& document);
+        Document& document,
+        bool enableWebsocketURP);
     virtual ~ChildSession();
 
     bool getStatus();

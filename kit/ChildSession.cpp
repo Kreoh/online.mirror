@@ -104,7 +104,8 @@ std::string formatUnoCommandInfo(const std::string_view unoCommand)
 
 ChildSession::ChildSession(const std::shared_ptr<ProtocolHandlerInterface>& protocol,
                            const std::string& id, const std::string& jailId,
-                           const std::string& jailRoot, Document& docManager)
+                           const std::string& jailRoot, Document& docManager,
+                           const bool enableWebsocketURP)
     : Session(protocol, "ToMaster-" + id, id, false)
     , _jailId(jailId)
     , _jailRoot(jailRoot)
@@ -120,9 +121,9 @@ ChildSession::ChildSession(const std::shared_ptr<ProtocolHandlerInterface>& prot
     , _hasURP(false)
 {
 #if !MOBILEAPP
-    if (isURPEnabled())
+    if (enableWebsocketURP && isURPEnabled())
     {
-        LOG_WRN("URP is enabled in the config: Starting a URP tunnel for this session ["
+        LOG_INF("Starting the WOPI-authorised URP tunnel for session ["
                 << getName() << "]");
 
         _hasURP = startURP(docManager.getLOKit(), &_urpContext);

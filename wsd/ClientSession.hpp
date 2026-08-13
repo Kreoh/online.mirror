@@ -82,6 +82,9 @@ public:
     void setDocumentOwner(const bool documentOwner) { _isDocumentOwner = documentOwner; }
     bool isDocumentOwner() const { return _isDocumentOwner; }
 
+    void setWebsocketUrpEnabled(const bool enabled) { _websocketUrpEnabled = enabled; }
+    bool isWebsocketUrpEnabled() const { return _websocketUrpEnabled; }
+
     /// Returns true iff the view is loaded and not disconnected
     /// from either the client or the Kit.
     bool isLive() const { return _state == SessionState::LIVE && !isCloseFrame(); }
@@ -600,6 +603,9 @@ private:
 
     /// Whether this session is the owner of currently opened document
     bool _isDocumentOwner;
+
+    /// Whether the WOPI host authorised this session to own the WebSocket URP bridge.
+    bool _websocketUrpEnabled;
 
     /// If it is allowed to try to switch from read-only to edit mode,
     /// because it's read-only just because of transient lock failure.

@@ -1511,6 +1511,8 @@ DocumentBroker::updateSessionWithWopiInfo(const std::shared_ptr<ClientSession>& 
     if (_childProcess)
         _serverAudit.mergeSettings(_childProcess);
 
+    session->setWebsocketUrpEnabled(wopiFileInfo->getEnableWebsocketURP());
+
     // Explicitly set the write-permission to match the UserCanWrite flag.
     // Technically, we only need to disable it when UserCanWrite=false,
     // but this is more readily comprehensible and easier to reason about.
@@ -4482,8 +4484,21 @@ std::size_t DocumentBroker::addSession(const std::shared_ptr<ClientSession>& ses
             throw std::runtime_error(msg);
         }
 
+        if (session->isWebsocketUrpEnabled())
+        {
+            for (const auto& sessionIt : _sessions)
+            {
+                if (sessionIt.second->isWebsocketUrpEnabled())
+                {
+                    throw std::runtime_error(
+                        "A WebSocket URP agent session is already attached to this document");
+                }
+            }
+        }
+
         // Request a new session from the child kit.
-        const std::string message = "session " + id + ' ' + _docKey + ' ' + _docId;
+        const std::string message = "session " + id + ' ' + _docKey + ' ' + _docId +
+                                    (session->isWebsocketUrpEnabled() ? " urp=1" : " urp=0");
         _childProcess->sendTextFrame(message);
 
 #if !MOBILEAPP
@@ -6009,9 +6024,6 @@ std::string DocumentBroker::applyViewSetting(const std::string& message, const s
 bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& session,
                                     const std::string& message, bool binary)
 {
-    if (message.starts_with("urp "))
-        return forwardUrpToChild(message);
-
     ASSERT_CORRECT_THREAD();
     LOG_ASSERT_MSG(session, "Must have a valid ClientSession");
     if (_sessions.find(session->getId()) == _sessions.end())
@@ -6019,6 +6031,16 @@ bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& sessio
         LOG_WRN("Cannot forward to unknown ClientSession [" << session->getId()
                                                             << "]: " << message);
         return false;
+    }
+
+    if (message.starts_with("urp "))
+    {
+        if (!session->isWebsocketUrpEnabled())
+        {
+            LOG_WRN("Rejecting URP frame from unauthorised session [" << session->getId() << ']');
+            return false;
+        }
+        return forwardUrpToChild(message);
     }
 
     // Ignore userinactive, useractive message until document is loaded
@@ -6659,16 +6681,22 @@ std::string DocumentBroker::getAbsoluteMediaPath(std::string localPath)
 
 void DocumentBroker::onUrpMessage(const char* data, size_t len)
 {
-    const auto session = getWriteableSession();
-    if (session)
+    for (const auto& sessionIt : _sessions)
     {
-        static constexpr std::string_view header = "urp: ";
-        const size_t responseSize = header.size() + len;
-        std::vector<char> response(responseSize);
-        std::memcpy(response.data(), header.data(), header.size());
-        std::memcpy(response.data() + header.size(), data, len);
-        session->sendBinaryFrame(response.data(), responseSize);
+        const auto& session = sessionIt.second;
+        if (session->isWebsocketUrpEnabled())
+        {
+            static constexpr std::string_view header = "urp: ";
+            const size_t responseSize = header.size() + len;
+            std::vector<char> response(responseSize);
+            std::memcpy(response.data(), header.data(), header.size());
+            std::memcpy(response.data() + header.size(), data, len);
+            session->sendBinaryFrame(response.data(), responseSize);
+            return;
+        }
     }
+
+    LOG_WRN("Dropping URP response because no authorised agent session is attached");
 }
 
 #if !MOBILEAPP && !WASMAPP

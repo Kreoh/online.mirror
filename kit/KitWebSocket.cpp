@@ -85,6 +85,7 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
         const std::string sessionId = tokens[1];
         _docKey = tokens[2];
         const std::string docId = tokens[3];
+        const bool enableWebsocketURP = tokens.size() > 4 && tokens.equals(4, "urp=1");
         const std::string url = Uri::decode(_docKey);
         if (Anonymizer::enabled())
         {
@@ -114,7 +115,8 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
         }
 
         // Validate and create session.
-        if (!(url == _document->getUrl() && _document->createSession(sessionId)))
+        if (!(url == _document->getUrl() &&
+              _document->createSession(sessionId, enableWebsocketURP)))
         {
             LOG_DBG("CreateSession failed.");
         }

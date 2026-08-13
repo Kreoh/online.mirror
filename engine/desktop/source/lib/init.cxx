@@ -4017,7 +4017,7 @@ lo_startURP(COKit* /* pThis */, void* pRecieveFromLOContext, void* pSendToLOCont
     Reference<XInstanceProvider> xInstanceProvider(new FunctionBasedURPInstanceProvider(xContext));
 
     Reference<XBridge> xBridge(xBridgeFactory->createBridge(
-        "functionurp" + OUString::number(FunctionBasedURPConnection::g_connectionCount), u"kit.urp"_ustr,
+        "functionurp" + OUString::number(FunctionBasedURPConnection::g_connectionCount), u"urp"_ustr,
         connection, xInstanceProvider));
 
     connection->setBridge(std::move(xBridge));
