@@ -5,10 +5,10 @@
 
 # -- Available env vars --
 # * DOCKER_HUB_REPO - which Docker Hub repo to use
-# * DOCKER_HUB_TAG  - which Docker Hub tag to create
-# * COLLABORA_ONLINE_REVISION - exact Kreoh source revision to build
+# * DOCKER_HUB_TAG  - exact revision-specific Docker Hub tag to create
 # * COLLABORA_ONLINE_REPO - which git repo to clone the online monorepo from
 # * COLLABORA_ONLINE_BRANCH - which branch to build
+# * COLLABORA_SOURCE_REVISION - exact full Kreoh source revision to build
 # * ENGINE_BUILD_TARGET - which make target to run for the engine (when building from source)
 # * ONLINE_EXTRA_BUILD_OPTIONS - extra build options for online
 # * NO_DOCKER_IMAGE - if set, don't build the docker image itself, just do all the preps
@@ -17,21 +17,41 @@
 if [ -z "$DOCKER_HUB_REPO" ]; then
   DOCKER_HUB_REPO="mydomain/collaboraonline"
 fi;
-if [ -z "$DOCKER_HUB_TAG" ]; then
-  DOCKER_HUB_TAG="latest"
+
+if [[ ! "${COLLABORA_SOURCE_REVISION:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "COLLABORA_SOURCE_REVISION must be an explicit full lowercase Git revision." >&2
+  exit 1
+fi
+if [ -n "${COLLABORA_ONLINE_REVISION:-}" ]; then
+  echo "COLLABORA_ONLINE_REVISION is unsupported: use COLLABORA_SOURCE_REVISION." >&2
+  exit 1
+fi
+
+EXPECTED_DOCKER_HUB_TAG="26.04.3.1-agent-save-${COLLABORA_SOURCE_REVISION:0:12}"
+if [ -z "${DOCKER_HUB_TAG:-}" ]; then
+  DOCKER_HUB_TAG="$EXPECTED_DOCKER_HUB_TAG"
 fi;
+if [ "$DOCKER_HUB_TAG" != "$EXPECTED_DOCKER_HUB_TAG" ]; then
+  echo "DOCKER_HUB_TAG must be $EXPECTED_DOCKER_HUB_TAG" >&2
+  exit 1
+fi
 echo "Using Docker Hub Repository: '$DOCKER_HUB_REPO' with tag '$DOCKER_HUB_TAG'."
 
+if [ -n "${COLLABORA_ONLINE_REPO:-}" ] && [ "$COLLABORA_ONLINE_REPO" != "https://github.com/Kreoh/online.mirror.git" ]; then
+  echo "COLLABORA_ONLINE_REPO must be https://github.com/Kreoh/online.mirror.git" >&2
+  exit 1
+fi
 if [ -z "$COLLABORA_ONLINE_REPO" ]; then
   COLLABORA_ONLINE_REPO="https://github.com/Kreoh/online.mirror.git"
 fi;
-if [ -z "$COLLABORA_ONLINE_BRANCH" ]; then
-  COLLABORA_ONLINE_BRANCH="main"
+if [ -n "${COLLABORA_ONLINE_BRANCH:-}" ] && [ "$COLLABORA_ONLINE_BRANCH" != "kreoh-co-26.04.3.1-agent" ]; then
+  echo "COLLABORA_ONLINE_BRANCH must be kreoh-co-26.04.3.1-agent" >&2
+  exit 1
+fi
+if [ -z "${COLLABORA_ONLINE_BRANCH:-}" ]; then
+  COLLABORA_ONLINE_BRANCH="kreoh-co-26.04.3.1-agent"
 fi;
-if [ -z "$COLLABORA_ONLINE_REVISION" ]; then
-  COLLABORA_ONLINE_REVISION="9b56f5583ab8df2202fb0b8471dcbf622d7825f8"
-fi;
-echo "Building exact revision '$COLLABORA_ONLINE_REVISION' from '$COLLABORA_ONLINE_REPO'"
+echo "Building exact revision '$COLLABORA_SOURCE_REVISION' from '$COLLABORA_ONLINE_REPO'"
 
 if [ -n "${ENGINE_ASSETS:-}" ]; then
   echo "ENGINE_ASSETS is prohibited: build the document engine from Kreoh source." >&2
@@ -48,17 +68,9 @@ echo "Engine build target: '$ENGINE_BUILD_TARGET'"
 SRCDIR=$(realpath `dirname $0`)
 INSTDIR="$SRCDIR/instdir"
 
-if [ -z "$(lsb_release -si)" ]; then
-  echo "WARNING: Unable to determine your distribution"
-  echo "(Is lsb_release installed?)"
-  echo "Using Ubuntu Dockerfile."
-  HOST_OS="Ubuntu"
-else
-  HOST_OS=$(lsb_release -si)
-fi
-if ! [ -e "$SRCDIR/$HOST_OS" ]; then
-  echo "There is no suitable Dockerfile for your host system: $HOST_OS."
-  echo "Please fix this problem and re-run $0"
+HOST_OS=$(lsb_release -si 2>/dev/null || true)
+if [ "$HOST_OS" != "Debian" ] && [ "$HOST_OS" != "Ubuntu" ]; then
+  echo "Unsupported source-build host '$HOST_OS': only pinned Debian and Ubuntu routes are allowed." >&2
   exit 1
 fi
 BUILDDIR="$SRCDIR/builddir"
@@ -77,10 +89,26 @@ mkdir -p "$INSTDIR"
 
 # Clone the online monorepo (engine/ contains the rendering engine)
 if test ! -d online ; then
-  git clone --depth=1 --branch "$COLLABORA_ONLINE_BRANCH" "$COLLABORA_ONLINE_REPO" online || exit 1
+  git clone --branch "$COLLABORA_ONLINE_BRANCH" "$COLLABORA_ONLINE_REPO" online || exit 1
 fi
 
-( cd online && git fetch origin "$COLLABORA_ONLINE_REVISION" && git checkout --detach -f "$COLLABORA_ONLINE_REVISION" && git clean -f -d && test "$(git rev-parse HEAD)" = "$COLLABORA_ONLINE_REVISION" ) || exit 1
+(
+  cd online &&
+  test "$(git config --get remote.origin.url)" = "$COLLABORA_ONLINE_REPO" &&
+  if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+    git fetch --unshallow --force origin \
+      "+refs/heads/$COLLABORA_ONLINE_BRANCH:refs/remotes/origin/$COLLABORA_ONLINE_BRANCH"
+  else
+    git fetch --force origin \
+      "+refs/heads/$COLLABORA_ONLINE_BRANCH:refs/remotes/origin/$COLLABORA_ONLINE_BRANCH"
+  fi &&
+  git cat-file -e "$COLLABORA_SOURCE_REVISION^{commit}" &&
+  git merge-base --is-ancestor "$COLLABORA_SOURCE_REVISION" \
+    "refs/remotes/origin/$COLLABORA_ONLINE_BRANCH" &&
+  git checkout --detach -f "$COLLABORA_SOURCE_REVISION" &&
+  git clean -f -d &&
+  test "$(git rev-parse HEAD)" = "$COLLABORA_SOURCE_REVISION"
+) || exit 1
 
 ##### engine #####
 
@@ -105,7 +133,9 @@ cp -a online/engine/instdir "$INSTDIR"/opt/collaboraoffice
 # Create new docker image
 if [ -z "$NO_DOCKER_IMAGE" ]; then
   cd "$SRCDIR"
-  docker build --no-cache -t $DOCKER_HUB_REPO:$DOCKER_HUB_TAG -f $HOST_OS . || exit 1
+  docker build --no-cache \
+    --build-arg "COLLABORA_SOURCE_REVISION=$COLLABORA_SOURCE_REVISION" \
+    -t "$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" -f "$HOST_OS" . || exit 1
 else
   echo "Skipping docker image build"
 fi;

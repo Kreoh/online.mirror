@@ -2,51 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-FROM archlinux
+FROM debian:stable@sha256:a317324860a60f88f98be05d1cab92f2262ef03884d1a6d7894894732ac9eb42 AS unsupported
 
-RUN pacman -Syu --noconfirm && \
-    pacman -S --noconfirm libpng fontconfig cpio \
-              nano \
-              openssh \
-              libxcb libxrender libxext \
-              wqy-zenhei wqy-microhei ttf-droid \
-              noto-fonts-cjk perl
-
-# copy freshly built engine and Collabora Online
-COPY /instdir /
-
-# set up Collabora Online (normally done by postinstall script of package)
-# Fix permissions
-RUN setcap cap_fowner,cap_chown,cap_sys_chroot=ep /usr/bin/coolforkit-caps && \
-    setcap cap_sys_admin=ep /usr/bin/coolmount && \
-    useradd --system --user-group --create-home --home-dir /opt/cool cool && \
-    rm -rf /opt/cool && \
-    mkdir -p /opt/cool/child-roots /opt/cool/cache && \
-    coolwsd-systemplate-setup /opt/cool/systemplate /opt/collaboraoffice >/dev/null 2>&1 && \
-    touch /var/log/coolwsd.log && \
-    chown cool:cool /var/log/coolwsd.log && \
-    chown -R cool:cool /opt/ && \
-    chown -R cool:cool /etc/coolwsd && \
-    # coolwsd appends a mapping for an arbitrary (e.g. OpenShift) UID to
-    # /etc/passwd at startup, so it must be writable by the root group
-    chmod g+w /etc/passwd
-
-EXPOSE 9980
-
-RUN usermod -u 972 cool
-
-# switch to cool user (use numeric user id to be compatible with Kubernetes Pod Security Policies)
-USER 972
-
-# Start coolwsd directly, with no shell in between: self-signed certificate
-# generation (unless DONT_GEN_SSL_CERT is set) and arbitrary-UID handling are
-# done inside coolwsd itself. The configuration is still driven dynamically by
-# environment variables (--use-env-vars).
-ENTRYPOINT ["/usr/bin/coolwsd", \
-            "--use-env-vars", \
-            "--o:sys_template_path=/opt/cool/systemplate", \
-            "--o:child_root_path=/opt/cool/child-roots", \
-            "--o:file_server_root_path=/usr/share/coolwsd", \
-            "--o:cache_files.path=/opt/cool/cache", \
-            "--o:logging.color=false", \
-            "--o:stop_on_config_change=true"]
+RUN echo "Arch Linux source-build route is unsupported: use build.sh on pinned Debian or Ubuntu." >&2 && exit 1

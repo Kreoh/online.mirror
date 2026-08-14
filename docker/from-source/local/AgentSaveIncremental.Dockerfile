@@ -1,9 +1,8 @@
 # syntax=docker/dockerfile:1.7
-ARG BUILDER_IMAGE=kreoh-collabora-builder@sha256:6a45bccbfefe9d8bc148a6dd46fbbe629bf7b0359c8e8cd8854fbd7adb26003a
-ARG RUNTIME_IMAGE=chatui-collabora@sha256:aedff845dc2b5b11e5e999aa616488739178a340be2290435f1ad8aeddb73121
-ARG KREOH_SOURCE_REVISION=9b56f5583ab8df2202fb0b8471dcbf622d7825f8
 
-FROM ${BUILDER_IMAGE} AS clean-test-config
+ARG COLLABORA_SOURCE_REVISION
+
+FROM kreoh-collabora-builder@sha256:6a45bccbfefe9d8bc148a6dd46fbbe629bf7b0359c8e8cd8854fbd7adb26003a AS clean-test-config
 
 USER builder
 RUN cd /build/builddir/online && \
@@ -40,12 +39,33 @@ RUN make -C /build/builddir/online/test -j "$(nproc)" unit-save-torture.la && \
         --unattended \
         --unitlib=/build/builddir/online/test/.libs/unit-save-torture.so
 
-FROM ${BUILDER_IMAGE} AS incremental-builder
-ARG KREOH_SOURCE_REVISION
+FROM kreoh-collabora-builder@sha256:6a45bccbfefe9d8bc148a6dd46fbbe629bf7b0359c8e8cd8854fbd7adb26003a AS source-verifier
+
+ARG COLLABORA_SOURCE_REVISION
+USER root
+RUN --mount=from=collabora_source,target=/source,ro \
+    source_paths=" \
+        common/Authorization.hpp \
+        kit/ChildSession.cpp kit/ChildSession.hpp \
+        kit/Kit.cpp kit/Kit.hpp kit/KitWebSocket.cpp \
+        wsd/ClientRequestDispatcher.cpp wsd/ClientRequestDispatcher.hpp \
+        wsd/ClientSession.cpp wsd/ClientSession.hpp \
+        wsd/DocumentBroker.cpp wsd/DocumentBroker.hpp \
+        wsd/wopi/WopiStorage.cpp wsd/wopi/WopiStorage.hpp \
+        test/Makefile.am test/UnitAgentSave.cpp" && \
+    test "${#COLLABORA_SOURCE_REVISION}" -eq 40 && \
+    case "$COLLABORA_SOURCE_REVISION" in *[!0-9a-f]*) exit 1 ;; esac && \
+    test "$(git -C /source rev-parse HEAD)" = "$COLLABORA_SOURCE_REVISION" && \
+    test "$(git -C /source branch --show-current)" = "kreoh-co-26.04.3.1-agent" && \
+    test "$(git -C /source remote get-url origin)" = "https://github.com/Kreoh/online.mirror.git" && \
+    git -C /source ls-files --error-unmatch -- $source_paths >/dev/null && \
+    test -z "$(git -C /source status --porcelain=v1 --untracked-files=all -- $source_paths)" && \
+    touch /tmp/source-verified
+
+FROM kreoh-collabora-builder@sha256:6a45bccbfefe9d8bc148a6dd46fbbe629bf7b0359c8e8cd8854fbd7adb26003a AS incremental-builder
 
 USER root
-COPY --from=collabora_source --chown=builder .git/refs/heads/kreoh-co-26.04.3.1-agent /tmp/kreoh-source-head
-RUN test "$(cat /tmp/kreoh-source-head)" = "$KREOH_SOURCE_REVISION"
+COPY --from=source-verifier /tmp/source-verified /tmp/source-verified
 COPY --from=collabora_source --chown=builder common/Authorization.hpp /build/builddir/online/common/Authorization.hpp
 COPY --from=collabora_source --chown=builder kit/ChildSession.cpp /build/builddir/online/kit/ChildSession.cpp
 COPY --from=collabora_source --chown=builder kit/ChildSession.hpp /build/builddir/online/kit/ChildSession.hpp
@@ -135,16 +155,16 @@ RUN make -C /build/builddir/online/test -j "$(nproc)" unit-save-torture.la && \
         --unattended \
         --unitlib=/build/builddir/online/test/.libs/unit-save-torture.so
 
-FROM ${RUNTIME_IMAGE}
-ARG KREOH_SOURCE_REVISION
+FROM chatui-collabora@sha256:aedff845dc2b5b11e5e999aa616488739178a340be2290435f1ad8aeddb73121
 
+ARG COLLABORA_SOURCE_REVISION
 USER root
 COPY --from=incremental-builder /build/instdir/ /
 RUN setcap cap_fowner,cap_chown,cap_sys_chroot=ep /usr/bin/coolforkit-caps && \
     setcap cap_sys_admin=ep /usr/bin/coolmount
 
 LABEL org.opencontainers.image.source="https://github.com/Kreoh/online.mirror" \
-      org.opencontainers.image.revision="${KREOH_SOURCE_REVISION}" \
+      org.opencontainers.image.revision="$COLLABORA_SOURCE_REVISION" \
       org.opencontainers.image.version="26.04.3.1-agent-save-local"
 
 USER 1001

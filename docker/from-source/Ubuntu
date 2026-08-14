@@ -2,7 +2,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea
+
+ARG COLLABORA_SOURCE_REVISION
 
 # refresh repos otherwise installations later may fail
 # install engine run-time dependencies
@@ -10,7 +12,9 @@ FROM ubuntu:24.04
 # install tzdata to accept the TZ environment variable
 # install an editor
 # tdf#117557 - Add CJK Fonts to Collabora Online Docker Image
-RUN apt-get update && \
+RUN test "${#COLLABORA_SOURCE_REVISION}" -eq 40 && \
+    case "$COLLABORA_SOURCE_REVISION" in *[!0-9a-f]*) exit 1 ;; esac && \
+    apt-get update && \
     apt-get -y install libpng16-16 fontconfig adduser cpio tzdata \
                findutils nano \
                libcap2-bin openssl openssh-client \
@@ -36,6 +40,9 @@ RUN setcap cap_fowner,cap_chown,cap_sys_chroot=ep /usr/bin/coolforkit-caps && \
     # coolwsd appends a mapping for an arbitrary (e.g. OpenShift) UID to
     # /etc/passwd at startup, so it must be writable by the root group
     chmod g+w /etc/passwd
+
+LABEL org.opencontainers.image.source="https://github.com/Kreoh/online.mirror" \
+      org.opencontainers.image.revision="$COLLABORA_SOURCE_REVISION"
 
 EXPOSE 9980
 

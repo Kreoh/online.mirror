@@ -232,6 +232,211 @@ public:
     }
 };
 
+class UnitAgentSaveTimeoutRecovery final : public AgentSaveTestBase
+{
+    STATE_ENUM(Phase, LoadBrowser, WaitBrowserLoad, WaitModifiedStatus, WaitBaselinePutFile,
+               WaitBaselineUpload, AttachAgent, WaitAgentAttached, WaitCoreSaveResult,
+               WaitTimeout, WaitSerialiserRemoval, ReconnectBrowser, WaitRecoveredLoad,
+               WaitReadableContent, Done)
+    _phase;
+    std::weak_ptr<ClientSession> _serialisingBrowser;
+    std::weak_ptr<ClientSession> _recoveredBrowser;
+    std::weak_ptr<DocumentBroker> _broker;
+    std::string _originalContent;
+    std::string _authoritativeContent;
+
+    bool proveRecoveredDocument()
+    {
+        if (_phase != Phase::WaitRecoveredLoad)
+            return false;
+
+        const auto recoveredBrowser = _recoveredBrowser.lock();
+        LOK_ASSERT(recoveredBrowser);
+        LOK_ASSERT_MESSAGE("The recovered browser must reach a live readable state",
+                           recoveredBrowser->isLive());
+        LOK_ASSERT_MESSAGE("The timeout must not replace authoritative WOPI bytes",
+                           getFileContent() == _authoritativeContent);
+        TRANSITION_STATE(_phase, Phase::WaitReadableContent);
+        WSD_CMD("uno .uno:SelectAll");
+        WSD_CMD("gettextselection mimetype=text/plain;charset=utf-8");
+        return true;
+    }
+
+public:
+    UnitAgentSaveTimeoutRecovery()
+        : AgentSaveTestBase("UnitAgentSaveTimeoutRecovery")
+        , _phase(Phase::LoadBrowser)
+    {
+        setTimeout(std::chrono::seconds(60));
+    }
+
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        config.setBool("security.enable_websocket_urp", true);
+    }
+
+    void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
+                             Poco::JSON::Object::Ptr& fileInfo) override
+    {
+        if (request.getURI().find(AgentToken) != std::string::npos)
+            fileInfo->set("EnableWebsocketURP", true);
+    }
+
+    void onDocBrokerAddSession(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        if (!session->isWebsocketUrpEnabled())
+        {
+            if (_phase == Phase::WaitBrowserLoad)
+            {
+                _serialisingBrowser = session;
+                _broker = session->getDocumentBroker();
+            }
+            else if (_phase == Phase::WaitRecoveredLoad)
+            {
+                LOK_ASSERT_MESSAGE("The recovered browser must attach to the same broker",
+                                   _broker.lock() == session->getDocumentBroker());
+                _recoveredBrowser = session;
+            }
+            return;
+        }
+
+        if (_phase != Phase::WaitAgentAttached)
+            return;
+
+        requestAgentSave(AgentToken, OperationId,
+                         [this](const std::shared_ptr<http::Session>& controlSession)
+                         {
+                             LOK_ASSERT(controlSession->response());
+                             LOK_ASSERT_EQUAL(http::StatusCode::Accepted,
+                                              controlSession->response()->statusCode());
+                             TRANSITION_STATE(_phase, Phase::WaitCoreSaveResult);
+                         });
+    }
+
+    bool onDocumentLoaded(const std::string&) override
+    {
+        if (_phase == Phase::WaitBrowserLoad)
+        {
+            _originalContent = getFileContent();
+            TRANSITION_STATE(_phase, Phase::WaitModifiedStatus);
+            WSD_CMD("key type=input char=97 key=0");
+            WSD_CMD("key type=up char=0 key=512");
+            return true;
+        }
+
+        return proveRecoveredDocument();
+    }
+
+    bool onViewLoaded(const std::string&) override
+    {
+        return proveRecoveredDocument();
+    }
+
+    bool onDocumentModified(const std::string&) override
+    {
+        if (_phase != Phase::WaitModifiedStatus)
+            return true;
+
+        TRANSITION_STATE(_phase, Phase::WaitBaselinePutFile);
+        WSD_CMD("save dontTerminateEdit=0 dontSaveIfUnmodified=0");
+        return true;
+    }
+
+    std::unique_ptr<http::Response>
+    assertPutFileRequest(const Poco::Net::HTTPRequest& request) override
+    {
+        LOK_ASSERT_STATE(_phase, Phase::WaitBaselinePutFile);
+        LOK_ASSERT_MESSAGE("The authoritative baseline save must be an ordinary browser save",
+                           !request.has("X-COOL-WOPI-ExtendedData"));
+        TRANSITION_STATE(_phase, Phase::WaitBaselineUpload);
+        return nullptr;
+    }
+
+    void onDocumentUploaded(bool success) override
+    {
+        if (_phase != Phase::WaitBaselineUpload)
+            return;
+
+        LOK_ASSERT_MESSAGE("The authoritative baseline must reach WOPI storage", success);
+        _authoritativeContent = getFileContent();
+        LOK_ASSERT_MESSAGE("The stored baseline must contain the browser edit",
+                           _authoritativeContent != _originalContent);
+        TRANSITION_STATE(_phase, Phase::AttachAgent);
+    }
+
+    bool filterChildMessage(const std::vector<char>& payload) override
+    {
+        if (_phase != Phase::WaitCoreSaveResult)
+            return false;
+
+        const std::string message(payload.data(), payload.size());
+        if (message.find("unocommandresult:") == std::string::npos ||
+            message.find(".uno:Save") == std::string::npos)
+            return false;
+
+        TRANSITION_STATE(_phase, Phase::WaitTimeout);
+        return true;
+    }
+
+    bool onDocumentError(const std::string& message) override
+    {
+        if (_phase != Phase::WaitTimeout)
+            return false;
+
+        LOK_ASSERT_MESSAGE("The serialising browser must receive the real Core save timeout",
+                           message.starts_with("error: cmd=storage kind=savetimedout"));
+        TRANSITION_STATE(_phase, Phase::WaitSerialiserRemoval);
+        return true;
+    }
+
+    void onDocBrokerRemoveSession(const std::string&,
+                                  const std::shared_ptr<ClientSession>& session) override
+    {
+        if (_phase != Phase::WaitSerialiserRemoval)
+            return;
+
+        const auto serialisingBrowser = _serialisingBrowser.lock();
+        LOK_ASSERT(serialisingBrowser);
+        LOK_ASSERT_MESSAGE("The timed-out serialising browser must be removed",
+                           serialisingBrowser == session);
+        LOK_ASSERT_MESSAGE("The timed-out serialiser must no longer be live", !session->isLive());
+        LOK_ASSERT_MESSAGE("Its unresolved Core response must remain rejected until closure",
+                           !session->canRegisterSaveRequest());
+        TRANSITION_STATE(_phase, Phase::ReconnectBrowser);
+    }
+
+    void invokeWSDTest() override
+    {
+        if (_phase == Phase::LoadBrowser)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitBrowserLoad);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
+            WSD_CMD("load url=" + getWopiSrc());
+        }
+        else if (_phase == Phase::AttachAgent)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitAgentAttached);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+            WSD_CMD("load url=" + getWopiSrc());
+        }
+        else if (_phase == Phase::ReconnectBrowser)
+        {
+            TRANSITION_STATE(_phase, Phase::WaitRecoveredLoad);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
+            WSD_CMD("load url=" + getWopiSrc());
+        }
+        else if (_phase == Phase::WaitReadableContent)
+        {
+            TRANSITION_STATE(_phase, Phase::Done);
+            const auto selection = helpers::assertResponseString(
+                getWsAt(0)->getWebSocket(), "textselectioncontent:", getTestname());
+            LOK_ASSERT_EQUAL_STR("textselectioncontent: a", selection);
+            passTest("A fresh browser loaded authoritative WOPI content after save timeout");
+        }
+    }
+};
+
 class UnitClosedAgentCannotSave final : public AgentSaveTestBase
 {
     STATE_ENUM(Phase, LoadBrowser, WaitBrowserLoad, WaitAgentAttached, WaitRejected, Done) _phase;
@@ -743,7 +948,8 @@ public:
 
 UnitBase** unit_create_wsd_multi(void)
 {
-    return new UnitBase* [] { new UnitAgentSave(), new UnitClosedAgentCannotSave(),
+    return new UnitBase* [] { new UnitAgentSave(), new UnitAgentSaveTimeoutRecovery(),
+                             new UnitClosedAgentCannotSave(),
                              new UnitWaitDisconnectAgentCannotSave(),
                              new UnitAgentExpiryDuringSave(),
                              new UnitAgentCoreSaveFailure(),
