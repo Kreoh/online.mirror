@@ -9,8 +9,6 @@ pipeline {
         IMAGE_BASE_NAME = 'ghcr.io/kreoh/collabora-online'
         SOURCE_BRANCH = 'kreoh-co-26.04.3.1-agent'
         SOURCE_VERSION = '26.04.3.1-agent-save'
-        COMMIT_SHA_12 = "${env.GIT_COMMIT}".take(12)
-        IMAGE_TAG = "${SOURCE_VERSION}-${COMMIT_SHA_12}"
     }
     options {
         skipDefaultCheckout(true)
@@ -33,21 +31,27 @@ pipeline {
                 }
             }
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: "*/${env.SOURCE_BRANCH}"]],
-                    doGenerateSubmoduleConfigurations: false,
-                    extensions: [
-                        [$class: 'CloneOption', shallow: true, depth: 1, noTags: true, timeout: 120],
-                        [$class: 'CheckoutOption', timeout: 120],
-                        [$class: 'CleanBeforeCheckout']
-                    ],
-                    userRemoteConfigs: [[
-                        credentialsId: '61c9e22d-1680-43b6-9452-6ef9c2f2a59c',
-                        url: 'https://github.com/Kreoh/online.mirror.git',
-                        refspec: "+refs/heads/${env.SOURCE_BRANCH}:refs/remotes/origin/${env.SOURCE_BRANCH}"
-                    ]]
-                ])
+                script {
+                    def scmVars = checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: "*/${env.SOURCE_BRANCH}"]],
+                        doGenerateSubmoduleConfigurations: false,
+                        extensions: [
+                            [$class: 'CloneOption', shallow: true, depth: 1, noTags: true, honorRefspec: true, timeout: 120],
+                            [$class: 'CheckoutOption', timeout: 120],
+                            [$class: 'CleanBeforeCheckout']
+                        ],
+                        userRemoteConfigs: [[
+                            credentialsId: '61c9e22d-1680-43b6-9452-6ef9c2f2a59c',
+                            url: 'https://github.com/Kreoh/online.mirror.git',
+                            refspec: "+refs/heads/${env.SOURCE_BRANCH}:refs/remotes/origin/${env.SOURCE_BRANCH}"
+                        ]]
+                    ])
+                    env.COLLABORA_SOURCE_REVISION =
+                        scmVars.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.IMAGE_TAG = "${env.SOURCE_VERSION}-${env.COLLABORA_SOURCE_REVISION.take(12)}"
+                    echo "Checked out ${env.COLLABORA_SOURCE_REVISION}; image tag is ${env.IMAGE_TAG}"
+                }
             }
         }
         stage('Validate Source') {
@@ -59,11 +63,11 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    case "$GIT_COMMIT" in
+                    case "$COLLABORA_SOURCE_REVISION" in
                         [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-                        *) echo "GIT_COMMIT must be a full lower-case Git revision." >&2; exit 1 ;;
+                        *) echo "COLLABORA_SOURCE_REVISION must be a full lower-case Git revision." >&2; exit 1 ;;
                     esac
-                    test "$(git rev-parse HEAD)" = "$GIT_COMMIT"
+                    test "$(git rev-parse HEAD)" = "$COLLABORA_SOURCE_REVISION"
                 '''
             }
         }
@@ -78,7 +82,7 @@ pipeline {
                     set -eu
                     DOCKER_HUB_REPO="$IMAGE_BASE_NAME" \
                     DOCKER_HUB_TAG="$IMAGE_TAG" \
-                    COLLABORA_SOURCE_REVISION="$GIT_COMMIT" \
+                    COLLABORA_SOURCE_REVISION="$COLLABORA_SOURCE_REVISION" \
                     COLLABORA_SOURCE_BUILD_HOST_OS=Debian \
                         docker/from-source/build.sh
                     revision=$(
@@ -86,7 +90,7 @@ pipeline {
                             --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
                             "$IMAGE_BASE_NAME:$IMAGE_TAG"
                     )
-                    test "$revision" = "$GIT_COMMIT"
+                    test "$revision" = "$COLLABORA_SOURCE_REVISION"
                 '''
             }
         }
