@@ -80,10 +80,28 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    DOCKER_HUB_REPO="$IMAGE_BASE_NAME" \
-                    DOCKER_HUB_TAG="$IMAGE_TAG" \
-                    COLLABORA_SOURCE_REVISION="$COLLABORA_SOURCE_REVISION" \
-                    COLLABORA_SOURCE_BUILD_HOST_OS=Debian \
+                    builder_tag="$IMAGE_BASE_NAME:source-builder"
+                    docker build \
+                        -t "$builder_tag" \
+                        -f docker/from-source/Builder.Dockerfile \
+                        docker/from-source
+                    uid="$(id -u)"
+                    gid="$(id -g)"
+                    docker_socket=/var/run/docker.sock
+                    docker_gid="$(stat -c '%g' "$docker_socket")"
+                    mkdir -p .jenkins-home
+                    docker run --rm \
+                        --user "$uid:$gid" \
+                        --group-add "$docker_gid" \
+                        -v "$PWD:/workspace" \
+                        -v "$docker_socket:$docker_socket" \
+                        -w /workspace \
+                        -e DOCKER_HUB_REPO="$IMAGE_BASE_NAME" \
+                        -e DOCKER_HUB_TAG="$IMAGE_TAG" \
+                        -e COLLABORA_SOURCE_REVISION="$COLLABORA_SOURCE_REVISION" \
+                        -e COLLABORA_SOURCE_BUILD_HOST_OS=Debian \
+                        -e HOME=/workspace/.jenkins-home \
+                        "$builder_tag" \
                         docker/from-source/build.sh
                     revision=$(
                         docker image inspect \
