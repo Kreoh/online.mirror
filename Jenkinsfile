@@ -102,6 +102,19 @@ pipeline {
                         -e COLLABORA_SOURCE_BUILD_HOST_OS=Debian \
                         -e HOME=/workspace/.jenkins-home \
                         "$builder_tag" \
+                        bash docker/from-source/check-builder.sh
+                    docker run --rm \
+                        --user "$uid:$gid" \
+                        --group-add "$docker_gid" \
+                        -v "$PWD:/workspace" \
+                        -v "$docker_socket:$docker_socket" \
+                        -w /workspace \
+                        -e DOCKER_HUB_REPO="$IMAGE_BASE_NAME" \
+                        -e DOCKER_HUB_TAG="$IMAGE_TAG" \
+                        -e COLLABORA_SOURCE_REVISION="$COLLABORA_SOURCE_REVISION" \
+                        -e COLLABORA_SOURCE_BUILD_HOST_OS=Debian \
+                        -e HOME=/workspace/.jenkins-home \
+                        "$builder_tag" \
                         docker/from-source/build.sh
                     revision=$(
                         docker image inspect \

@@ -20,7 +20,7 @@ RUN apt-get update && \
         cmake \
         curl \
         default-jdk \
-        docker.io \
+        docker-cli \
         doxygen \
         flex \
         fontconfig \
@@ -28,6 +28,7 @@ RUN apt-get update && \
         graphviz \
         git \
         junit4 \
+        libarchive-tools \
         libexpat1-dev \
         libcap-dev \
         libcups2-dev \
@@ -56,6 +57,8 @@ RUN apt-get update && \
         python3 \
         python3-dev \
         qtbase5-dev \
+        unzip \
+        uuid-runtime \
         xsltproc \
         zip \
         zlib1g-dev && \
