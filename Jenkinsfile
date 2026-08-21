@@ -54,6 +54,7 @@ pipeline {
                     DOCKER_HUB_REPO="$IMAGE_BASE_NAME" \
                     DOCKER_HUB_TAG="$IMAGE_TAG" \
                     COLLABORA_SOURCE_REVISION="$GIT_COMMIT" \
+                    COLLABORA_SOURCE_BUILD_HOST_OS=Debian \
                         docker/from-source/build.sh
                     revision=$(
                         docker image inspect \

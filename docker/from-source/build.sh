@@ -9,6 +9,7 @@
 # * COLLABORA_ONLINE_REPO - which git repo to clone the online monorepo from
 # * COLLABORA_ONLINE_BRANCH - which branch to build
 # * COLLABORA_SOURCE_REVISION - exact full Kreoh source revision to build
+# * COLLABORA_SOURCE_BUILD_HOST_OS - explicit runtime Dockerfile route, Debian or Ubuntu
 # * ENGINE_BUILD_TARGET - which make target to run for the engine (when building from source)
 # * ONLINE_EXTRA_BUILD_OPTIONS - extra build options for online
 # * NO_DOCKER_IMAGE - if set, don't build the docker image itself, just do all the preps
@@ -19,7 +20,7 @@ if [ -z "$DOCKER_HUB_REPO" ]; then
 fi;
 
 if [[ ! "${COLLABORA_SOURCE_REVISION:-}" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "COLLABORA_SOURCE_REVISION must be an explicit full lowercase Git revision." >&2
+  echo "COLLABORA_SOURCE_REVISION must be an explicit full lower-case Git revision." >&2
   exit 1
 fi
 if [ -n "${COLLABORA_ONLINE_REVISION:-}" ]; then
@@ -68,9 +69,13 @@ echo "Engine build target: '$ENGINE_BUILD_TARGET'"
 SRCDIR=$(realpath `dirname $0`)
 INSTDIR="$SRCDIR/instdir"
 
-HOST_OS=$(lsb_release -si 2>/dev/null || true)
+if [ -n "${COLLABORA_SOURCE_BUILD_HOST_OS:-}" ]; then
+  HOST_OS="$COLLABORA_SOURCE_BUILD_HOST_OS"
+else
+  HOST_OS=$(lsb_release -si 2>/dev/null || true)
+fi
 if [ "$HOST_OS" != "Debian" ] && [ "$HOST_OS" != "Ubuntu" ]; then
-  echo "Unsupported source-build host '$HOST_OS': only pinned Debian and Ubuntu routes are allowed." >&2
+  echo "Unsupported source-build host '$HOST_OS': set COLLABORA_SOURCE_BUILD_HOST_OS to Debian or Ubuntu." >&2
   exit 1
 fi
 BUILDDIR="$SRCDIR/builddir"
