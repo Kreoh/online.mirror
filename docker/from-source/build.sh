@@ -94,19 +94,14 @@ mkdir -p "$INSTDIR"
 
 # Clone the online monorepo (engine/ contains the rendering engine)
 if test ! -d online ; then
-  git clone --branch "$COLLABORA_ONLINE_BRANCH" "$COLLABORA_ONLINE_REPO" online || exit 1
+  git clone --depth=1 --branch "$COLLABORA_ONLINE_BRANCH" "$COLLABORA_ONLINE_REPO" online || exit 1
 fi
 
 (
   cd online &&
   test "$(git config --get remote.origin.url)" = "$COLLABORA_ONLINE_REPO" &&
-  if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-    git fetch --unshallow --force origin \
-      "+refs/heads/$COLLABORA_ONLINE_BRANCH:refs/remotes/origin/$COLLABORA_ONLINE_BRANCH"
-  else
-    git fetch --force origin \
-      "+refs/heads/$COLLABORA_ONLINE_BRANCH:refs/remotes/origin/$COLLABORA_ONLINE_BRANCH"
-  fi &&
+  git fetch --depth=1 --force origin \
+    "+refs/heads/$COLLABORA_ONLINE_BRANCH:refs/remotes/origin/$COLLABORA_ONLINE_BRANCH" &&
   git cat-file -e "$COLLABORA_SOURCE_REVISION^{commit}" &&
   git merge-base --is-ancestor "$COLLABORA_SOURCE_REVISION" \
     "refs/remotes/origin/$COLLABORA_ONLINE_BRANCH" &&
