@@ -20,7 +20,9 @@ for tool in \
   gzip \
   java \
   make \
+  meson \
   nasm \
+  ninja \
   node \
   npm \
   patch \

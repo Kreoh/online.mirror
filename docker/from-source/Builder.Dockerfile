@@ -50,7 +50,9 @@ RUN apt-get update && \
         libxml2-utils \
         libxslt1-dev \
         libzstd-dev \
+        meson \
         nasm \
+        ninja-build \
         nodejs \
         npm \
         pkg-config \
