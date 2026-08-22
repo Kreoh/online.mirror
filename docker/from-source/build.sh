@@ -110,6 +110,9 @@ fi
   test "$(git rev-parse HEAD)" = "$COLLABORA_SOURCE_REVISION"
 ) || exit 1
 
+bash "$SRCDIR/check-builder.sh" "$BUILDDIR/online/configure.ac" || exit 1
+( cd online && ./autogen.sh ) || exit 1
+
 ##### engine #####
 
 ( cd online/engine && ./autogen.sh --with-distro=CPLinux-LOKit --disable-epm --without-package-format --disable-symbols ) || exit 1
@@ -122,7 +125,6 @@ cp -a online/engine/instdir "$INSTDIR"/opt/collaboraoffice
 ##### coolwsd & cool #####
 
 # build
-( cd online && ./autogen.sh ) || exit 1
 ( cd online && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-tests --with-lokit-path="$BUILDDIR"/online/engine/include --with-lo-path=/opt/collaboraoffice $ONLINE_EXTRA_BUILD_OPTIONS) || exit 1
 ( cd online && make -j $(nproc)) || exit 1
 

@@ -42,10 +42,13 @@ RUN apt-get update && \
         libkf5kio-dev \
         libkf5windowsystem-dev \
         libkrb5-dev \
+        libcppunit-dev \
         libpam0g-dev \
         libpcre2-dev \
         libpng-dev \
+        libssl-dev \
         libtool \
+        libunwind-dev \
         libxrandr-dev \
         libxml2-utils \
         libxslt1-dev \
@@ -58,9 +61,12 @@ RUN apt-get update && \
         pkg-config \
         python3 \
         python3-dev \
+        python3-lxml \
+        python3-polib \
         qtbase5-dev \
         unzip \
         uuid-runtime \
+        wget \
         xsltproc \
         zip \
         zlib1g-dev && \
