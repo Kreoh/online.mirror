@@ -233,7 +233,8 @@ public:
     /// Post the message - in the unipoll world we're in the right thread anyway
     bool postMessage(const std::string_view data, WSOpCode code) const;
 
-    bool createSession(const std::string& sessionId);
+    bool createSession(const std::string& sessionId, bool enableWebsocketURP,
+                       int boundAgentViewId = -1);
 
     /// Purges dead connections and returns
     /// the remaining number of clients.
@@ -598,7 +599,11 @@ bool isURPEnabled();
 extern Util::LoadTimings KitLoadTimings;
 
 /// Start a URP connection, checking if URP is enabled and there is not already an active URP session
-bool startURP(const std::shared_ptr<COKit>& LOKit, void** ppURPContext);
+bool startURP(const std::shared_ptr<COKit>& LOKit,
+              const std::shared_ptr<COKitDocument>& LOKitDocument, void** ppURPContext);
+
+/// Stop a bound URP connection and release its framed pipe reader.
+void stopURP(const std::shared_ptr<COKit>& LOKit, void* pURPContext);
 
 /// Ensure all recorded traces hit the disk
 void flushTraceEventRecordings();

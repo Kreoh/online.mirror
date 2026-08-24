@@ -129,6 +129,38 @@ ClientSession::ClientSession(const std::shared_ptr<ProtocolHandlerInterface>& ws
     , _canonicalViewId(CanonicalViewId::None)
     , _state(SessionState::DETACHED)
     , _isDocumentOwner(false)
+    , _websocketUrpEnabled(false)
+    , _agentRenderRequested(
+          [&requestDetails]
+          {
+              std::string value;
+              return requestDetails.getParamByName("agentview", value) && value == "1";
+          }())
+    , _agentRenderView(false)
+    , _requestedAgentViewIdPresent(
+          [&requestDetails]
+          {
+              std::string value;
+              return requestDetails.getParamByName("agentviewid", value);
+          }())
+    , _requestedAgentViewId(
+          [&requestDetails]
+          {
+              std::string value;
+              if (!requestDetails.getParamByName("agentviewid", value))
+                  return -1;
+              try
+              {
+                  std::size_t parsed = 0;
+                  const int viewId = std::stoi(value, &parsed);
+                  return viewId >= 0 && parsed == value.size() ? viewId : -1;
+              }
+              catch (const std::exception&)
+              {
+                  return -1;
+              }
+          }())
+    , _boundAgentViewId(-1)
     , _isTextDocument(false)
     , _thumbnailSession(false)
     , _sentAudit(false)
@@ -814,6 +846,8 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         // forwarded to the child later as we need it to be able to run before
         // documents are loaded
         LOG_TRC("UNO remote protocol message (from client): " << firstLine);
+        LOG_DBG("Received URP client frame: payload-length="
+                << (length >= 4 ? length - 4 : 0));
         return forwardToChild(std::string(buffer, length), docBroker);
     }
 
@@ -2640,6 +2674,19 @@ void ClientSession::setReadOnly(bool val)
     sendTextFrame("perm: " + perm);
 }
 
+void ClientSession::setWebsocketUrpEnabled(const bool enabled)
+{
+    _agentRenderView = enabled && _agentRenderRequested;
+    _websocketUrpEnabled = enabled && !_agentRenderRequested;
+    LOG_DBG("WOPI session classification: urp-authorised=" << enabled
+                                                            << " agent-render="
+                                                            << _agentRenderView
+                                                            << " urp-client="
+                                                            << _websocketUrpEnabled
+                                                            << " requested-view="
+                                                            << _requestedAgentViewId);
+}
+
 void ClientSession::sendFileMode(const bool readOnly, const bool editComments, bool manageRedlines)
 {
     std::string result = "filemode:{\"readOnly\": ";
@@ -4078,7 +4125,10 @@ void ClientSession::onDisconnect()
         // Connection terminated. Destroy session.
         LOG_DBG("on docKey [" << docKey << "] terminated. Cleaning up");
 
-        docBroker->removeSession(session);
+        if (session->isWebsocketUrpEnabled())
+            docBroker->detachUrpTransport(session);
+        else
+            docBroker->removeSession(session);
     }
     catch (const UnauthorizedRequestException& exc)
     {

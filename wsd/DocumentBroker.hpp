@@ -44,8 +44,11 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <optional>
+#include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -437,6 +440,9 @@ public:
     /// Removes a session by ID. Returns the new number of sessions.
     std::size_t removeSession(const std::shared_ptr<ClientSession>& session);
 
+    /// Clears this socket if it is the document's registered direct URP transport.
+    bool detachUrpTransport(const std::shared_ptr<ClientSession>& session);
+
     /// Add a callback to be invoked in our polling thread.
     void addCallback(const SocketPoll::CallbackFn& fn);
 
@@ -513,6 +519,10 @@ public:
     void handleClipboardRequest(ClipboardRequest type,  const std::shared_ptr<StreamSocket> &socket,
                                 const std::string &viewId, const std::string &tag,
                                 const std::string &clipFile);
+
+    /// Starts a manual save for the live agent session authenticated by bearerToken.
+    void handleAgentSaveRequest(const std::shared_ptr<StreamSocket>& socket,
+                                std::string_view bearerToken, const std::string& operationId);
     static bool handlePersistentClipboardRequest(ClipboardRequest type,
                                                  const std::shared_ptr<StreamSocket> &socket,
                                                  const std::string &tag, bool sendError = false);
@@ -581,7 +591,9 @@ public:
 
     /// User wants to issue a save on the document.
     bool manualSave(const std::shared_ptr<ClientSession>& session, bool dontTerminateEdit,
-                    bool dontSaveIfUnmodified, const std::string& extendedData);
+                    bool dontSaveIfUnmodified, const std::string& extendedData,
+                    bool allowBackground = true,
+                    const std::shared_ptr<ClientSession>& uploadSession = nullptr);
 
     /// Sends a message to all sessions.
     /// Returns the number of sessions sent the message to.
@@ -895,13 +907,21 @@ private:
     /// Handles the completion of failed uploading to storage.
     void handleUploadToStorageFailed(const StorageBase::UploadResult& uploadResult);
 
+    /// Ends an agent save without allowing its local file version to use browser retry authority.
+    void abandonAgentSaveAttempt(std::string_view reason);
+
+    /// Clears broker-side tracking, preserving rejected agent responses when requested.
+    void clearSaveResponseTracking(bool rejectResponse);
+
     /// Send the error message about failed upload
     void reportUploadToStorageFailed(std::string_view reason = {});
 
     /// Sends the .uno:Save command to LoKit.
     bool sendUnoSave(const std::shared_ptr<ClientSession>& session, bool dontTerminateEdit = true,
                      bool dontSaveIfUnmodified = true, bool isAutosave = false, bool finalWrite = false,
-                     const std::string& extendedData = std::string());
+                     const std::string& extendedData = std::string(),
+                     bool allowBackground = true,
+                     const std::shared_ptr<ClientSession>& uploadSession = nullptr);
 
     /**
      * Report back the save result to PostMessage users (Action_Save_Resp)
@@ -1440,6 +1460,62 @@ private:
         bool _completed;
     };
 
+    /// One operation-marked agent save from Core serialisation through WOPI upload.
+    class AgentSaveAttempt final
+    {
+    public:
+        enum class Phase
+        {
+            AwaitingSaveResponse,
+            Uploading
+        };
+
+        AgentSaveAttempt(const std::shared_ptr<ClientSession>& serializingSession,
+                         const std::shared_ptr<ClientSession>& authoritySession,
+                         std::string serializingSessionId, std::string authoritySessionId,
+                         std::string operationId, std::size_t saveRequestId,
+                         std::chrono::steady_clock::time_point saveRequestTime)
+            : _serializingSession(serializingSession)
+            , _authoritySession(authoritySession)
+            , _serializingSessionId(std::move(serializingSessionId))
+            , _authoritySessionId(std::move(authoritySessionId))
+            , _operationId(std::move(operationId))
+            , _saveRequestId(saveRequestId)
+            , _saveRequestTime(saveRequestTime)
+            , _phase(Phase::AwaitingSaveResponse)
+        {
+        }
+
+        std::shared_ptr<ClientSession> serializingSession() const
+        {
+            return _serializingSession.lock();
+        }
+        std::shared_ptr<ClientSession> authoritySession() const
+        {
+            return _authoritySession.lock();
+        }
+        const std::string& serializingSessionId() const { return _serializingSessionId; }
+        const std::string& authoritySessionId() const { return _authoritySessionId; }
+        const std::string& operationId() const { return _operationId; }
+        std::size_t saveRequestId() const { return _saveRequestId; }
+        std::chrono::steady_clock::time_point saveRequestTime() const
+        {
+            return _saveRequestTime;
+        }
+        Phase phase() const { return _phase; }
+        void startUploading() { _phase = Phase::Uploading; }
+
+    private:
+        const std::weak_ptr<ClientSession> _serializingSession;
+        const std::weak_ptr<ClientSession> _authoritySession;
+        const std::string _serializingSessionId;
+        const std::string _authoritySessionId;
+        const std::string _operationId;
+        const std::size_t _saveRequestId;
+        const std::chrono::steady_clock::time_point _saveRequestTime;
+        Phase _phase;
+    };
+
     /// Responsible for managing document uploading into storage.
     class StorageManager final
     {
@@ -1833,7 +1909,6 @@ private:
         _docState.setActivity(DocumentState::Activity::None);
     }
 
-    bool forwardUrpToChild(const std::string& message);
 
     /// Performs aggregated work after servicing all client sessions
     void processBatchUpdates();
@@ -1866,6 +1941,14 @@ private:
     /// All session of this DocBroker by ID.
     SessionMap<ClientSession> _sessions;
 
+    /// The sole direct URP WebSocket response target. It does not own a Kit view.
+    std::weak_ptr<ClientSession> _urpTransport;
+
+    /// The bounded Core greeting emitted before the direct transport sends its first frame.
+    std::vector<char> _pendingUrpResponse;
+    std::optional<std::chrono::steady_clock::time_point> _pendingUrpResponseTime;
+    bool _urpTransportEverAttached = false;
+
 #if !MOBILEAPP && !WASMAPP
     ServerAuditUtil _serverAudit;
 #endif
@@ -1893,6 +1976,13 @@ private:
     /// The last upload request's attributes. Re-used to retry after failure.
     /// Updated right before uploading.
     StorageBase::Attributes _lastStorageAttrs;
+    /// The sole operation-marked agent save currently awaiting a response or upload.
+    std::optional<AgentSaveAttempt> _agentSaveAttempt;
+    /// The session and request currently awaiting Core's unnumbered save response.
+    std::weak_ptr<ClientSession> _saveResponseSession;
+    std::size_t _saveResponseRequestId = 0;
+    /// Exact local version from a failed agent upload, excluded from generic retry.
+    std::optional<std::chrono::system_clock::time_point> _agentSaveNoRetryFileTime;
 
     /// URL-based key. May be repeated during the lifetime of WSD.
     const std::string _docKey;

@@ -82,9 +82,61 @@ public:
     void setDocumentOwner(const bool documentOwner) { _isDocumentOwner = documentOwner; }
     bool isDocumentOwner() const { return _isDocumentOwner; }
 
+    void setWebsocketUrpEnabled(bool enabled);
+    bool isWebsocketUrpEnabled() const { return _websocketUrpEnabled; }
+    bool isAgentRenderRequested() const { return _agentRenderRequested; }
+    bool isAgentRenderView() const { return _agentRenderView; }
+    bool hasRequestedAgentViewId() const { return _requestedAgentViewIdPresent; }
+    int getRequestedAgentViewId() const { return _requestedAgentViewId; }
+    int getBoundAgentViewId() const { return _boundAgentViewId; }
+    void bindAgentViewId(const int viewId) { _boundAgentViewId = viewId; }
+
     /// Returns true iff the view is loaded and not disconnected
     /// from either the client or the Kit.
     bool isLive() const { return _state == SessionState::LIVE && !isCloseFrame(); }
+
+    /// Returns true iff this WOPI-authorised URP session is still attached and may request a save.
+    bool isAgentSaveEligible() const
+    {
+        return _websocketUrpEnabled && isWritable() && _boundAgentViewId >= 0 &&
+               !_docBroker.expired() && !isCloseFrame() && _auth.isValid();
+    }
+
+    struct SaveResponseCorrelation
+    {
+        std::size_t requestId;
+        bool rejected;
+    };
+
+    /// Core does not return a request ID, so only one unresolved save may exist per view.
+    bool canRegisterSaveRequest() const { return !_saveResponseCorrelation; }
+    std::size_t registerSaveRequest()
+    {
+        assert(canRegisterSaveRequest());
+        const std::size_t requestId = ++_lastSaveRequestId;
+        _saveResponseCorrelation.emplace(requestId, false);
+        return requestId;
+    }
+    void rejectSaveResponse(const std::size_t requestId)
+    {
+        if (_saveResponseCorrelation && _saveResponseCorrelation->first == requestId)
+            _saveResponseCorrelation->second = true;
+    }
+    bool cancelSaveResponse(const std::size_t requestId)
+    {
+        if (!_saveResponseCorrelation || _saveResponseCorrelation->first != requestId)
+            return false;
+        _saveResponseCorrelation.reset();
+        return true;
+    }
+    std::optional<SaveResponseCorrelation> consumeSaveResponse()
+    {
+        if (!_saveResponseCorrelation)
+            return std::nullopt;
+        const auto correlation = *_saveResponseCorrelation;
+        _saveResponseCorrelation.reset();
+        return SaveResponseCorrelation{ correlation.first, correlation.second };
+    }
 
     /// Handle kit-to-client message.
     bool handleKitToClientMessage(const std::shared_ptr<Message>& payload);
@@ -600,6 +652,20 @@ private:
 
     /// Whether this session is the owner of currently opened document
     bool _isDocumentOwner;
+
+    /// Whether the WOPI host authorised this session to own the WebSocket URP bridge.
+    bool _websocketUrpEnabled;
+
+    /// A WOPI-authorised agent connection using the ordinary loaded-view protocol.
+    bool _agentRenderRequested;
+    bool _agentRenderView;
+    bool _requestedAgentViewIdPresent;
+    int _requestedAgentViewId;
+    int _boundAgentViewId;
+
+    /// Core returns no save request ID. Keep the unresolved request until its response arrives.
+    std::size_t _lastSaveRequestId = 0;
+    std::optional<std::pair<std::size_t, bool>> _saveResponseCorrelation;
 
     /// If it is allowed to try to switch from read-only to edit mode,
     /// because it's read-only just because of transient lock failure.

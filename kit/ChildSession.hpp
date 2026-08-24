@@ -74,7 +74,9 @@ public:
         const std::string& id,
         const std::string& jailId,
         const std::string& jailRoot,
-        Document& document);
+        Document& document,
+        bool enableWebsocketURP,
+        int boundAgentViewId = -1);
     virtual ~ChildSession();
 
     bool getStatus();
@@ -141,6 +143,7 @@ public:
 
     void resetDocManager()
     {
+        stopURPBridge();
         disconnect();
         _docManager = nullptr;
     }
@@ -168,7 +171,9 @@ public:
 #endif
 
 private:
+    void stopURPBridge();
     bool loadDocument(const StringVector& tokens);
+    bool loadBoundAgentView(const StringVector& tokens);
     bool saveDocumentBackground(const StringVector &tokens);
 
     bool getCommandValues(const StringVector& tokens);
@@ -351,6 +356,9 @@ private:
 
     /// whether there is a URP session created for this ChildSession
     bool _hasURP;
+
+    /// The existing writable collaborator view borrowed by this URP transport session.
+    int _boundAgentViewId;
 
     // When state is added - please update dumpState above.
 

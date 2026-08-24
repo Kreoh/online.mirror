@@ -256,6 +256,19 @@ public:
 
     const std::map<std::string, std::string>& getDocumentURIParams() const { return _docUriParams; }
 
+    /// Returns a parameter from the outer request URI, if it exists.
+    bool getRequestParamByName(const std::string& name, std::string& value) const
+    {
+        const auto it = _params.find(name);
+        if (it != _params.end())
+        {
+            value = it->second;
+            return true;
+        }
+
+        return false;
+    }
+
     /// Returns a param, if it exists.
     bool getParamByName(const std::string& name, std::string& value) const
     {

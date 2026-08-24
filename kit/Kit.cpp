@@ -64,6 +64,7 @@ Util::LoadTimings KitLoadTimings;
 
 #if !MOBILEAPP
 #include <dlfcn.h>
+#include <poll.h>
 #endif
 
 #ifdef __linux__
@@ -95,11 +96,14 @@ Util::LoadTimings KitLoadTimings;
 #include <sysexits.h>
 #endif
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <cerrno>
 #include <chrono>
 #include <climits>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -110,6 +114,7 @@ Util::LoadTimings KitLoadTimings;
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include <COKit/COKitInit.h>
 #include <COKit/COKit.hxx>
@@ -930,9 +935,12 @@ bool Document::postMessage(const std::string_view data, const WSOpCode code) con
     return true;
 }
 
-bool Document::createSession(const std::string& sessionId)
+bool Document::createSession(const std::string& sessionId, const bool enableWebsocketURP,
+                             const int boundAgentViewId)
 {
 #if defined(BUILDING_TESTS)
+    (void)enableWebsocketURP;
+    (void)boundAgentViewId;
     LOG_ERR("createSession stubbed for tests for " << sessionId);
     return false;
 #else
@@ -950,7 +958,7 @@ bool Document::createSession(const std::string& sessionId)
 
         auto session = std::make_shared<ChildSession>(
             _websocketHandler, sessionId,
-            _jailId, JailRoot, *this);
+            _jailId, JailRoot, *this, enableWebsocketURP, boundAgentViewId);
         if (!Util::isMobileApp())
             UnitKit::get().postKitSessionCreated(session.get());
         _sessions.emplace(sessionId, session);
@@ -1281,14 +1289,27 @@ void Document::trimAfterInactivity()
     if (SigUtil::getTerminationFlag())
         return;
 
+    CallbackDescriptor* descriptor = static_cast<CallbackDescriptor*>(data);
+    assert(descriptor && "Null callback data.");
+    assert(descriptor->getDoc() && "Null Document instance.");
+
+    std::string attributedPayload;
+    constexpr std::string_view SourceViewMarker = " sourceviewid=";
+    if (eType == COKitCallbackType::INVALIDATE_TILES &&
+        (!p || std::string_view(p).rfind(SourceViewMarker) == std::string_view::npos))
+    {
+        const Document* document = descriptor->getDoc();
+        const int sourceViewId =
+            document->_loKitDocument ? document->_loKitDocument->getView() : -1;
+        attributedPayload = std::string(p ? p : "(nil)") + std::string(SourceViewMarker) +
+                            std::to_string(sourceViewId);
+        p = attributedPayload.c_str();
+    }
+
     // unusual COKit event from another thread.
     // data - is CallbackDescriptors which share process' lifetime.
     if (pushToMainThread(ViewCallback, eType, p, data))
         return;
-
-    CallbackDescriptor* descriptor = static_cast<CallbackDescriptor*>(data);
-    assert(descriptor && "Null callback data.");
-    assert(descriptor->getDoc() && "Null Document instance.");
 
     std::unique_ptr<KitQueue> &queue = descriptor->getDoc()->_queue;
     assert(queue && "Null KitQueue.");
@@ -4767,33 +4788,131 @@ static int receiveURPData(void* context, const signed char* buffer, size_t bytes
     return ptr - buffer;
 }
 
-static size_t sendURPData(void* context, signed char* buffer, size_t bytesToRead)
-{
-    signed char *ptr = buffer;
-    while (bytesToRead > 0)
-    {
-        ssize_t bytes = ::read(reinterpret_cast<intptr_t>(context), ptr, bytesToRead);
-        if (bytes <= 0)
-            break;
-        bytesToRead -= bytes;
-        ptr += bytes;
-    }
-    return ptr - buffer;
-}
-
 static int receiveURPFromEngine(void* context, const signed char* buffer, int bytesToWrite)
 {
     assert(bytesToWrite >= 0 && "cannot be negative");
     return receiveURPData(context, buffer, bytesToWrite);
 }
 
+namespace
+{
+constexpr std::size_t MaxUrpFrameSize = 64 * 1024 * 1024;
+
+struct BoundURPReader
+{
+    std::shared_ptr<COKitDocument> document;
+    int fd;
+    int cancelFD;
+    std::vector<signed char> payload;
+    std::size_t offset = 0;
+};
+
+struct BoundURPContext
+{
+    std::unique_ptr<BoundURPReader> reader;
+    void* coreContext = nullptr;
+    int cancelReadFD = -1;
+    int cancelWriteFD = -1;
+
+    ~BoundURPContext()
+    {
+        if (cancelReadFD >= 0)
+            ::close(cancelReadFD);
+        if (cancelWriteFD >= 0)
+            ::close(cancelWriteFD);
+    }
+
+    void cancelReader()
+    {
+        if (cancelWriteFD >= 0)
+        {
+            ::close(cancelWriteFD);
+            cancelWriteFD = -1;
+        }
+    }
+};
+
+bool readURPExact(const BoundURPReader& reader, signed char* buffer, std::size_t length)
+{
+    std::size_t offset = 0;
+    while (offset < length)
+    {
+        pollfd descriptors[] = { { reader.fd, POLLIN, 0 }, { reader.cancelFD, POLLIN, 0 } };
+        int ready;
+        do
+        {
+            ready = ::poll(descriptors, 2, -1);
+        } while (ready < 0 && errno == EINTR);
+
+        if (ready <= 0 || descriptors[1].revents != 0 ||
+            (descriptors[0].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0)
+            return false;
+
+        const ssize_t bytes = ::read(reader.fd, buffer + offset, length - offset);
+        if (bytes <= 0)
+            return false;
+        offset += bytes;
+    }
+    return true;
+}
+
+std::uint32_t readURPUint32(const signed char* bytes)
+{
+    return (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[0])) << 24) |
+           (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[1])) << 16) |
+           (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[2])) << 8) |
+           static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[3]));
+}
+}
+
 static int sendURPToEngine(void* context, signed char* buffer, int bytesToRead)
 {
     assert(bytesToRead >= 0 && "cannot be negative");
-    return sendURPData(context, buffer, bytesToRead);
+    LOG_DBG("URP/WS: Core requested input: length=" << bytesToRead);
+    auto& reader = *static_cast<BoundURPReader*>(context);
+    std::size_t written = 0;
+    while (written < static_cast<std::size_t>(bytesToRead))
+    {
+        if (reader.offset == reader.payload.size())
+        {
+            signed char header[sizeof(std::uint32_t) * 2];
+            if (!readURPExact(reader, header, sizeof(header)))
+                break;
+            const std::uint32_t viewId = readURPUint32(header);
+            const std::uint32_t payloadSize = readURPUint32(header + sizeof(std::uint32_t));
+            if (payloadSize == 0 || payloadSize > MaxUrpFrameSize ||
+                viewId > static_cast<std::uint32_t>(std::numeric_limits<int>::max()))
+            {
+                LOG_ERR("URP/WS: Invalid bound-view frame");
+                break;
+            }
+            LOG_DBG("URP/WS: Received bound frame header: view=" << viewId
+                                                                  << " payload-length="
+                                                                  << payloadSize);
+            reader.document->setView(static_cast<int>(viewId));
+            LOG_DBG("URP/WS: Selected bound view=" << viewId
+                                                   << " current-view="
+                                                   << reader.document->getView());
+            reader.payload.resize(payloadSize);
+            reader.offset = 0;
+            if (!readURPExact(reader, reader.payload.data(), payloadSize))
+                break;
+        }
+
+        const std::size_t available = reader.payload.size() - reader.offset;
+        const std::size_t count =
+            std::min(available, static_cast<std::size_t>(bytesToRead) - written);
+        std::memcpy(buffer + written, reader.payload.data() + reader.offset, count);
+        reader.offset += count;
+        written += count;
+        if (reader.offset == reader.payload.size())
+            LOG_DBG("URP/WS: Delivered bound frame: payload-length=" << reader.payload.size());
+    }
+    return static_cast<int>(written);
 }
 
-bool startURP(const std::shared_ptr<COKit>& LOKit, void** ppURPContext)
+bool startURP(const std::shared_ptr<COKit>& LOKit,
+              const std::shared_ptr<COKitDocument>& LOKitDocument, void** ppURPContext)
 {
     if (!isURPEnabled())
     {
@@ -4807,18 +4926,47 @@ bool startURP(const std::shared_ptr<COKit>& LOKit, void** ppURPContext)
         return false;
     }
 
-    *ppURPContext = LOKit->startURP(reinterpret_cast<void*>(URPfromLoFDs[1]),
-                                    reinterpret_cast<void*>(URPtoLoFDs[0]),
-                                    receiveURPFromEngine, sendURPToEngine);
+    auto context = std::make_unique<BoundURPContext>();
+    if (!LOKitDocument)
+    {
+        LOG_ERR("URP/WS: Cannot bind URP before the agent document view is loaded");
+        return false;
+    }
+    int cancelFDs[2];
+    if (Syscall::pipe2(cancelFDs, O_CLOEXEC) != 0)
+    {
+        LOG_SYS("URP/WS: Failed to create the bound-reader cancellation pipe");
+        return false;
+    }
+    context->cancelReadFD = cancelFDs[0];
+    context->cancelWriteFD = cancelFDs[1];
+    context->reader = std::make_unique<BoundURPReader>(BoundURPReader{
+        LOKitDocument, URPtoLoFDs[0], context->cancelReadFD, {}, 0 });
+    context->coreContext = LOKit->startURP(reinterpret_cast<void*>(URPfromLoFDs[1]),
+                                           context->reader.get(), receiveURPFromEngine,
+                                           sendURPToEngine);
 
-    if (!*ppURPContext)
+    if (!context->coreContext)
     {
         LOG_ERR("URP/WS: tried to start a URP session but core did not let us");
         return false;
     }
 
+    *ppURPContext = context.release();
     URPStartCount++;
     return true;
+}
+
+void stopURP(const std::shared_ptr<COKit>& LOKit, void* pURPContext)
+{
+    std::unique_ptr<BoundURPContext> context(static_cast<BoundURPContext*>(pURPContext));
+    if (context && context->coreContext)
+    {
+        context->cancelReader();
+        LOKit->stopURP(context->coreContext);
+        LOG_ASSERT_MSG(URPStartCount > 0, "URP start/stop lifecycle is unbalanced");
+        --URPStartCount;
+    }
 }
 
 /// Initializes COKit for cross-fork re-use.

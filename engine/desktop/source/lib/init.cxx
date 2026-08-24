@@ -4163,6 +4163,7 @@ public:
     virtual void close() override;
     virtual OUString getDescription() override;
     void setBridge(const Reference<XBridge>&);
+    void shutdown();
     void* getContext();
     inline static int g_connectionCount = 0;
 
@@ -4189,8 +4190,8 @@ FunctionBasedURPConnection::FunctionBasedURPConnection(
 
 FunctionBasedURPConnection::~FunctionBasedURPConnection()
 {
-    Reference<XComponent> xComp(m_URPBridge, UNO_QUERY_THROW);
-    xComp->dispose(); // TODO: check this doesn't deadlock
+    SAL_WARN_IF(m_URPBridge.is(), "kit.urp",
+                "FunctionBasedURPConnection destroyed without a synchronous shutdown");
 }
 
 void* FunctionBasedURPConnection::getContext() { return this; }
@@ -4222,6 +4223,15 @@ void FunctionBasedURPConnection::close()
 OUString FunctionBasedURPConnection::getDescription() { return u""_ustr; }
 
 void FunctionBasedURPConnection::setBridge(const Reference<XBridge>& xBridge) { m_URPBridge = xBridge; }
+
+void FunctionBasedURPConnection::shutdown()
+{
+    // Keep the connection alive while disposing the bridge breaks its reference cycle.
+    rtl::Reference<FunctionBasedURPConnection> keepAlive(this);
+    Reference<XComponent> component(m_URPBridge, UNO_QUERY_THROW);
+    m_URPBridge.clear();
+    component->dispose();
+}
 }
 
 static void*
@@ -4243,7 +4253,7 @@ lo_startURP(COKit* /* pThis */, void* pRecieveFromEngineContext, void* pSendToEn
     Reference<XInstanceProvider> xInstanceProvider(new FunctionBasedURPInstanceProvider(xContext));
 
     Reference<XBridge> xBridge(xBridgeFactory->createBridge(
-        "functionurp" + OUString::number(FunctionBasedURPConnection::g_connectionCount), u"kit.urp"_ustr,
+        "functionurp" + OUString::number(FunctionBasedURPConnection::g_connectionCount), u"urp"_ustr,
         connection, xInstanceProvider));
 
     connection->setBridge(std::move(xBridge));
@@ -4258,7 +4268,7 @@ lo_startURP(COKit* /* pThis */, void* pRecieveFromEngineContext, void* pSendToEn
 static void lo_stopURP(COKit* /* pThis */,
                        void* pFunctionBasedURPConnection/* FunctionBasedURPConnection* */)
 {
-    static_cast<FunctionBasedURPConnection*>(pFunctionBasedURPConnection)->close();
+    static_cast<FunctionBasedURPConnection*>(pFunctionBasedURPConnection)->shutdown();
 }
 
 static bool joinThreads(JoinThreads eCategory)

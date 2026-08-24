@@ -20,6 +20,7 @@
 void ChildSession::loKitCallback(const COKitCallbackType /* type */,
                                  const std::string& /* payload */) {}
 void ChildSession::disconnect() {}
+void ChildSession::stopURPBridge() {}
 int ChildSession::getSpeed() { return 0; }
 bool ChildSession::_handleInput(const char* /*buffer*/, int /*length*/) { return false; }
 TilePrioritizer::Priority ChildSession::getTilePriority(const TileDesc &) const { return TilePrioritizer::Priority::NORMAL; }

@@ -19,6 +19,7 @@
 
 #include <chrono>
 #include <string>
+#include <string_view>
 
 namespace Poco
 {
@@ -143,6 +144,34 @@ public:
         // Check TTL-based expiry only for tokens with a known expiry.
         return _expiryEpoch <= duration::zero() ||
                std::chrono::system_clock::now().time_since_epoch() < _expiryEpoch;
+    }
+
+    /// Returns true iff this is a live token authorization matching the supplied bearer token.
+    /// The comparison examines every byte when the lengths match.
+    bool matchesToken(const std::string_view token) const
+    {
+        if (_type != Type::Token || !isValid() || _data.size() != token.size())
+            return false;
+
+        unsigned char difference = 0;
+        for (std::size_t index = 0; index < _data.size(); ++index)
+            difference |= static_cast<unsigned char>(_data[index] ^ token[index]);
+
+        return difference == 0;
+    }
+
+    /// Returns true iff both authorizations contain the same live bearer token.
+    bool matches(const Authorization& other) const
+    {
+        if (_type != Type::Token || other._type != Type::Token || !isValid() ||
+            !other.isValid() || _data.size() != other._data.size())
+            return false;
+
+        unsigned char difference = 0;
+        for (std::size_t index = 0; index < _data.size(); ++index)
+            difference |= static_cast<unsigned char>(_data[index] ^ other._data[index]);
+
+        return difference == 0;
     }
 
     /// Set the access_token parameter to the given URI.

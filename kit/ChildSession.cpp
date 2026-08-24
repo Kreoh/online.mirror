@@ -104,7 +104,8 @@ std::string formatUnoCommandInfo(const std::string_view unoCommand)
 
 ChildSession::ChildSession(const std::shared_ptr<ProtocolHandlerInterface>& protocol,
                            const std::string& id, const std::string& jailId,
-                           const std::string& jailRoot, Document& docManager)
+                           const std::string& jailRoot, Document& docManager,
+                           const bool enableWebsocketURP, const int boundAgentViewId)
     : Session(protocol, "ToMaster-" + id, id, false)
     , _jailId(jailId)
     , _jailRoot(jailRoot)
@@ -118,14 +119,15 @@ ChildSession::ChildSession(const std::shared_ptr<ProtocolHandlerInterface>& prot
     , _clientVisibleArea(0, 0, 0, 0)
     , _urpContext(nullptr)
     , _hasURP(false)
+    , _boundAgentViewId(boundAgentViewId)
 {
 #if !MOBILEAPP
-    if (isURPEnabled())
+    if (enableWebsocketURP && isURPEnabled())
     {
-        LOG_WRN("URP is enabled in the config: Starting a URP tunnel for this session ["
+        LOG_INF("Starting the WOPI-authorised URP tunnel for session ["
                 << getName() << "]");
 
-        _hasURP = startURP(docManager.getLOKit(), &_urpContext);
+        _hasURP = startURP(docManager.getLOKit(), docManager.getLOKitDocument(), &_urpContext);
 
         if (!_hasURP)
             LOG_INF("Failed to start a URP bridge for this session [" << getName()
@@ -138,18 +140,31 @@ ChildSession::ChildSession(const std::shared_ptr<ProtocolHandlerInterface>& prot
 ChildSession::~ChildSession()
 {
     LOG_INF("~ChildSession dtor [" << getName() << ']');
-    disconnect();
 
-    if (_hasURP)
-    {
-        _docManager->getLOKit()->stopURP(_urpContext);
-    }
+    stopURPBridge();
+
+    disconnect();
 
     // The iframe that would have answered any in-flight proxy listener calls is gone:
     if (_docManager != nullptr)
     {
         _docManager->getLOKit()->cancelProxyCalls();
     }
+}
+
+void ChildSession::stopURPBridge()
+{
+#if !MOBILEAPP
+    if (!_hasURP)
+        return;
+
+    LOG_ASSERT_MSG(_docManager, "Cannot stop a bound URP bridge without its Document");
+    stopURP(_docManager->getLOKit(), _urpContext);
+    _urpContext = nullptr;
+    _hasURP = false;
+#else
+    LOG_ASSERT_MSG(!_hasURP, "A mobile ChildSession cannot own a URP bridge");
+#endif
 }
 
 void ChildSession::disconnect()
@@ -160,7 +175,8 @@ void ChildSession::disconnect()
         {
             if (_docManager != nullptr)
             {
-                _docManager->onUnload(*this);
+                if (_boundAgentViewId < 0)
+                    _docManager->onUnload(*this);
 
                 // Notify that we've unloaded this view.
                 std::ostringstream oss;
@@ -224,6 +240,7 @@ bool ChildSession::_handleInput(const char *buffer, int length)
 
     if (tokens.size() > 0 && tokens.equals(0, "useractive") && getLOKitDocument() != nullptr)
     {
+        LOG_DBG("Session became active: view=" << _viewId);
         LOG_DBG("Handling message after inactivity of " << getInactivityMS());
         setIsActive(true);
 
@@ -323,7 +340,7 @@ bool ChildSession::_handleInput(const char *buffer, int length)
         InputProcessingManager processInput(getProtocol(), false);
         // disable watchdog while loading
         WatchdogGuard watchdogGuard;
-        _isDocLoaded = loadDocument(tokens);
+        _isDocLoaded = _boundAgentViewId >= 0 ? loadBoundAgentView(tokens) : loadDocument(tokens);
 
         LogUiCommands uiLog(*this);
         uiLog.logSaveLoad("load", Poco::URI(getJailedFilePath()).getPath(), timeStart);
@@ -888,6 +905,7 @@ bool ChildSession::_handleInput(const char *buffer, int length)
         }
         else if (tokens.equals(0, "userinactive"))
         {
+            LOG_DBG("Session became inactive: view=" << _viewId);
             setIsActive(false);
             _docManager->trimIfInactive();
         }
@@ -988,6 +1006,7 @@ bool ChildSession::_handleInput(const char *buffer, int length)
 
                 LOG_DBG("setviewreadonly: viewId=" << _viewId
                         << " readOnly=" << readOnly);
+
             }
         }
         else if (tokens.equals(0, "rendersearchresult"))
@@ -1196,6 +1215,40 @@ bool ChildSession::loadDocument(const StringVector& tokens)
     sendTextFrame(oss.str());
 
     LOG_INF("Loaded session " << getId());
+    return true;
+}
+
+bool ChildSession::loadBoundAgentView(const StringVector& tokens)
+{
+    if (!_hasURP || tokens.size() < 2 || !_docManager->isLoaded() ||
+        !_docManager->getViewInfo().contains(_boundAgentViewId))
+    {
+        sendTextFrameAndLogError("error: cmd=load kind=invalidagentview");
+        return false;
+    }
+
+    int part = -1;
+    std::string timestamp;
+    parseDocOptions(tokens, part, timestamp);
+    _viewId = _boundAgentViewId;
+
+    auto document = getLOKitDocument();
+    if (!document)
+        return false;
+    document->setView(_viewId);
+    _docType = LOKitHelper::getDocumentTypeAsString(document.get());
+    _currentPartUniqueId = document->getPart();
+
+    const std::string status = LOKitHelper::documentStatus(document.get());
+    if (status.empty() || !sendTextFrame("status: " + status))
+        return false;
+
+    sendTextFrame("editor: " + std::to_string(_docManager->getEditorId()));
+    std::ostringstream loaded;
+    loaded << "loaded: viewid=" << _viewId << " views=" << _docManager->getViewsCount()
+           << " isfirst=false";
+    sendTextFrame(loaded.str());
+    LOG_INF("Bound URP session [" << getId() << "] to existing agent view [" << _viewId << ']');
     return true;
 }
 
@@ -3932,7 +3985,17 @@ void ChildSession::loKitCallback(const COKitCallbackType type, const std::string
         break;
     case COKitCallbackType::INVALIDATE_TILES:
         {
-            StringVector tokens(StringVector::tokenize(payload, ','));
+            constexpr std::string_view SourceViewMarker = " sourceviewid=";
+            const std::size_t sourceViewMarkerPosition = payload.rfind(SourceViewMarker);
+            const std::string sourceViewAttribution =
+                sourceViewMarkerPosition == std::string::npos
+                    ? " sourceviewid=-1"
+                    : payload.substr(sourceViewMarkerPosition);
+            const std::string invalidationPayload =
+                sourceViewMarkerPosition == std::string::npos
+                    ? payload
+                    : payload.substr(0, sourceViewMarkerPosition);
+            StringVector tokens(StringVector::tokenize(invalidationPayload, ','));
             if (tokens.size() == 5 || tokens.size() == 6)
             {
                 int part, x, y, width, height, mode = 0;
@@ -3966,7 +4029,8 @@ void ChildSession::loKitCallback(const COKitCallbackType type, const std::string
                               " y=" + std::to_string(y) +
                               " width=" + std::to_string(width) +
                               " height=" + std::to_string(height) +
-                              " wid=" + std::to_string(getCurrentWireId()));
+                              " wid=" + std::to_string(getCurrentWireId()) +
+                              sourceViewAttribution);
             }
             else if ((tokens.size() == 2 || tokens.size() == 3) && tokens.equals(0, "EMPTY"))
             {
@@ -3974,12 +4038,13 @@ void ChildSession::loKitCallback(const COKitCallbackType type, const std::string
                 const int part = (_docType != "text" ? std::atoi(tokens[1].c_str()) : 0); // Writer renders everything as part 0.
                 const int mode = (tokens.size() == 3 ? std::atoi(tokens[2].c_str()) : 0);
                 sendTextFrame("invalidatetiles: EMPTY, " + std::to_string(part) + ", " +
-                              std::to_string(mode) + " wid=" + std::to_string(getCurrentWireId()));
+                              std::to_string(mode) + " wid=" + std::to_string(getCurrentWireId()) +
+                              sourceViewAttribution);
             }
             else
             {
-                sendTextFrame("invalidatetiles: " + payload +
-                              " wid=" + std::to_string(getCurrentWireId()));
+                sendTextFrame("invalidatetiles: " + invalidationPayload +
+                              " wid=" + std::to_string(getCurrentWireId()) + sourceViewAttribution);
             }
         }
         break;
