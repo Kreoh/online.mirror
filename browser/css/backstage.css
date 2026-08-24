@@ -77,10 +77,6 @@
 	gap: var(--spacing-s);
 }
 
-.backstage-header-title::before {
-	background-image: url('images/collabora-office-white.svg');
-}
-
 .backstage-header-close {
 	display: inline-flex;
 	align-items: center;
@@ -112,6 +108,10 @@
 	background-repeat: no-repeat;
 	background-position: center;
 	background-size: contain;
+}
+
+.backstage-header-title::before {
+	background-image: none;
 }
 
 .backstage-header-close-icon::before {
