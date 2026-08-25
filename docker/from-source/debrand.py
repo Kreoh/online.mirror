@@ -17,7 +17,11 @@ from pathlib import Path
 
 PRODUCT_NAME = "Online Office"
 FORBIDDEN_MARK = re.compile(r"\bcollabora(?:[_ -]?(?:office|online))?\b", re.IGNORECASE)
-URL_WITH_MARK = re.compile(r"https?://[^\s\"'<>]*collabora[^\s\"'<>]*", re.IGNORECASE)
+URL_WITH_MARK = re.compile(
+    r"https?://[^\s\"'<>\(\)\[\]\{\},;]*collabora"
+    r"[^\s\"'<>\(\)\[\]\{\},;]*",
+    re.IGNORECASE,
+)
 BRANDED_HOST_FRAGMENT = re.compile(
     r"(?:[A-Za-z0-9-]+\.)*collabora(?:online|office)?\.[A-Za-z]{2,}",
     re.IGNORECASE,
@@ -369,6 +373,18 @@ def fail_on_violations(violations: list[str]) -> None:
 
 
 def scan_source(root: Path) -> None:
+    configure = root / "configure.ac"
+    if configure.is_file():
+        configure_text = configure.read_text(encoding="utf-8")
+        if not re.search(
+            r"^AC_INIT\(\[coolwsd\], \[[^]]+\], \[about:blank\], "
+            r"\[coolwsd\], \[about:blank\]\)$",
+            configure_text,
+            re.MULTILINE,
+        ):
+            raise RuntimeError(
+                "configure.ac has an invalid neutral AC_INIT declaration"
+            )
     violations = scan_files(source_paths(root))
     fail_on_violations(violations)
     print("Online Office pre-build debranding scan passed.")
@@ -669,6 +685,19 @@ def self_test() -> None:
     assert "collabora" not in rewritten_catalogue_url.lower()
     assert rewritten_catalogue_url.count("example.invalid") == 3
 
+    autoconf_declaration = (
+        "AC_INIT([coolwsd], [26.04.4.0], "
+        "[https://github.com/CollaboraOnline/online/issues], [coolwsd], "
+        "[https://www.collaboraoffice.org/])\n"
+    )
+    rewritten_autoconf_declaration = rewrite_text(autoconf_declaration)
+    assert rewritten_autoconf_declaration == (
+        "AC_INIT([coolwsd], [26.04.4.0], [about:blank], [coolwsd], [about:blank])\n"
+    )
+    assert (
+        rewrite_text(rewritten_autoconf_declaration) == rewritten_autoconf_declaration
+    )
+
     embedded = "prefixCollaboraOfficeSuffix PRODUCTNAME.collaboraoffice CollaboraOffice"
     assert rewrite_text(embedded) == (
         "prefixOnlineOfficeSuffix PRODUCTNAME.OnlineOffice OnlineOffice"
@@ -730,6 +759,10 @@ def self_test() -> None:
         )
         (source_root / "browser/po/ui-en_GB.po").write_text(
             wrapped_catalogue_url,
+            encoding="utf-8",
+        )
+        (source_root / "configure.ac").write_text(
+            autoconf_declaration,
             encoding="utf-8",
         )
         (demo / "manifest.json").write_text(
