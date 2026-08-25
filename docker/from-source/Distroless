@@ -1,0 +1,96 @@
+# syntax=docker/dockerfile:1.7
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+ARG source_builder="debian:stable@sha256:a317324860a60f88f98be05d1cab92f2262ef03884d1a6d7894894732ac9eb42"
+ARG runtime_base="registry.opencode.de/oci-community/images/zendis/base@sha256:95e6d88e56ea0d74cd2cd126429d764efb3981c2f0e8c7bb2ae801291f20c36f"
+
+# Inspect the exact final base while generating the jail and dependency
+# closure. The final stage uses the same immutable manifest.
+FROM ${runtime_base} AS target-base
+
+FROM ${source_builder} AS assembler
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG ONLINE_OFFICE_SOURCE_REVISION
+ENV LC_ALL=C.UTF-8
+
+# Build-time tools plus libraries linked by the source builder. The assembler
+# copies only libraries proved necessary by ELF inspection. No Debian CJK font
+# packages are installed because the engine already bundles Noto CJK.
+RUN test "${#ONLINE_OFFICE_SOURCE_REVISION}" -eq 40 && \
+    case "$ONLINE_OFFICE_SOURCE_REVISION" in *[!0-9a-f]*) exit 1 ;; esac && \
+    apt-get update && \
+    apt-get -y install --no-install-recommends \
+        binutils \
+        ca-certificates \
+        cpio \
+        fontconfig-config \
+        libcap2 \
+        libcap2-bin \
+        libgcc-s1 \
+        libpam0g \
+        libpcre2-8-0 \
+        libpng16-16t64 \
+        libssl3t64 \
+        libstdc++6 \
+        libubsan1 \
+        libunwind8 \
+        libzstd1 \
+        locales \
+        python3 \
+        zlib1g && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=target-base / /target-base/
+COPY /instdir /source-instdir/
+COPY --chmod=755 /assemble-source-rootfs.sh /usr/local/bin/assemble-source-rootfs
+COPY --chmod=755 /verify-source-rootfs.sh /usr/local/bin/verify-source-rootfs
+COPY --chmod=755 /verify-elf-closure.sh /usr/local/bin/verify-elf-closure.sh
+COPY /verify_elf_closure.py /usr/local/bin/verify_elf_closure.py
+COPY /runtime-dynamic-dependencies.conf /usr/local/share/online-office/runtime-dynamic-dependencies.conf
+RUN /usr/local/bin/assemble-source-rootfs
+
+# Exercise the same cross-stage COPY operation used by the runtime and fail
+# closed if BuildKit loses either security.capability xattr.
+FROM assembler AS verify-caps
+COPY --from=assembler /rootfs /verified-rootfs
+RUN set -eu; \
+    forkit=$(/sbin/getcap -n /verified-rootfs/usr/bin/coolforkit-caps | sed 's/^[^ ]* *//'); \
+    mount=$(/sbin/getcap -n /verified-rootfs/usr/bin/coolmount | sed 's/^[^ ]* *//'); \
+    test "$forkit" = 'cap_chown,cap_fowner,cap_sys_chroot=ep'; \
+    test "$mount" = 'cap_sys_admin=ep'; \
+    ROOTFS=/verified-rootfs TARGET_ROOT=/target-base \
+        /usr/local/bin/verify-source-rootfs --staged
+
+FROM ${runtime_base}
+
+ARG ONLINE_OFFICE_SOURCE_REVISION
+LABEL org.opencontainers.image.source="https://github.com/Kreoh/online.mirror" \
+      org.opencontainers.image.revision="$ONLINE_OFFICE_SOURCE_REVISION" \
+      org.opencontainers.image.title="Online Office" \
+      org.opencontainers.image.description="Source-built Online Office server" \
+      io.kreoh.online-office.runtime="distroless-source"
+
+ENV LC_CTYPE=C.UTF-8
+
+# This is the final stage's sole filesystem instruction and sole source
+# payload layer. Ownership is prepared in the assembler, so no recursive
+# chown copy-up follows it.
+COPY --from=verify-caps /verified-rootfs /
+
+EXPOSE 9980
+USER 100
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD ["/usr/bin/coolwsd", "--probe", "--use-env-vars"]
+
+ENTRYPOINT ["/usr/bin/coolwsd", \
+            "--use-env-vars", \
+            "--o:sys_template_path=/opt/cool/systemplate", \
+            "--o:child_root_path=/opt/cool/child-roots", \
+            "--o:file_server_root_path=/usr/share/coolwsd", \
+            "--o:cache_files.path=/opt/cool/cache", \
+            "--o:logging.color=false", \
+            "--o:stop_on_config_change=true"]

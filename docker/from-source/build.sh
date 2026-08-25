@@ -9,7 +9,7 @@
 # * ONLINE_OFFICE_SOURCE_REPOSITORY - which Git repository to clone
 # * ONLINE_OFFICE_SOURCE_BRANCH - which branch to build
 # * ONLINE_OFFICE_SOURCE_REVISION - exact full Kreoh source revision to build
-# * ONLINE_OFFICE_SOURCE_BUILD_HOST_OS - explicit runtime Dockerfile route, Debian or Ubuntu
+# * ONLINE_OFFICE_FINAL_DOCKERFILE - explicit final packaging route, Distroless or Debian
 # * ONLINE_OFFICE_SOURCE_CACHE_DIR - persistent build cache root
 # * ONLINE_OFFICE_FINAL_DOCKER_NO_CACHE - if true, build the final Docker image without cache
 # * ENGINE_BUILD_TARGET - which make target to run for the engine (when building from source)
@@ -68,15 +68,17 @@ SRCDIR=$(realpath `dirname $0`)
 INSTDIR="$SRCDIR/instdir"
 CACHE_ROOT="${ONLINE_OFFICE_SOURCE_CACHE_DIR:-${HOME:-$SRCDIR}/.cache/online-office-source-builder}"
 
-if [ -n "${ONLINE_OFFICE_SOURCE_BUILD_HOST_OS:-}" ]; then
-  HOST_OS="$ONLINE_OFFICE_SOURCE_BUILD_HOST_OS"
-else
-  HOST_OS=$(lsb_release -si 2>/dev/null || true)
-fi
-if [ "$HOST_OS" != "Debian" ] && [ "$HOST_OS" != "Ubuntu" ]; then
-  echo "Unsupported source-build host '$HOST_OS': set ONLINE_OFFICE_SOURCE_BUILD_HOST_OS to Debian or Ubuntu." >&2
-  exit 1
-fi
+FINAL_DOCKERFILE="${ONLINE_OFFICE_FINAL_DOCKERFILE:-Distroless}"
+case "$FINAL_DOCKERFILE" in
+  Distroless) ;;
+  Debian)
+    echo "WARNING: using the diagnostic Debian image instead of the publication route." >&2
+    ;;
+  *)
+    echo "ONLINE_OFFICE_FINAL_DOCKERFILE must be Distroless or Debian." >&2
+    exit 1
+    ;;
+esac
 BUILDDIR="$CACHE_ROOT/builddir"
 if [ -z "${CCACHE_DIR:-}" ]; then
   export CCACHE_DIR="$CACHE_ROOT/ccache"
@@ -143,13 +145,30 @@ if [ -z "$NO_DOCKER_IMAGE" ]; then
   cd "$SRCDIR"
   docker_build_args=(
     --build-arg "ONLINE_OFFICE_SOURCE_REVISION=$ONLINE_OFFICE_SOURCE_REVISION" \
-    -t "$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" -f "$HOST_OS"
+    -t "$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" -f "$FINAL_DOCKERFILE"
   )
   case "${ONLINE_OFFICE_FINAL_DOCKER_NO_CACHE:-}" in
     1|true|TRUE|yes|YES) docker_build_args=(--no-cache "${docker_build_args[@]}") ;;
   esac
-  docker build "${docker_build_args[@]}" . || exit 1
-  python3 "$SRCDIR/debrand.py" scan-image "$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" || exit 1
+  DOCKER_BUILDKIT=1 docker build "${docker_build_args[@]}" . || exit 1
+  if [ "$FINAL_DOCKERFILE" = Distroless ]; then
+    python3 "$SRCDIR/debrand.py" scan-distroless-image \
+      "$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" \
+      "$BUILDDIR/online/engine/static/emscripten/favicon.ico" \
+      "$ONLINE_OFFICE_SOURCE_REVISION" || exit 1
+    DOCKER_BUILDKIT=1 docker build \
+      --build-arg "RUNTIME_IMAGE=$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" \
+      -f RuntimeVerifier.Dockerfile . || exit 1
+    sh "$SRCDIR/verify-running-image.sh" \
+      "$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" || exit 1
+    sh "$SRCDIR/report-image-size.sh" \
+      "$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" || exit 1
+  else
+    python3 "$SRCDIR/debrand.py" scan-image \
+      "$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" \
+      "$BUILDDIR/online/engine/static/emscripten/favicon.ico" \
+      "$ONLINE_OFFICE_SOURCE_REVISION" || exit 1
+  fi
 else
   echo "Skipping docker image build"
 fi;

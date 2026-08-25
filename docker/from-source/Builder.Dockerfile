@@ -32,6 +32,7 @@ RUN apt-get update && \
         libarchive-tools \
         libexpat1-dev \
         libcap-dev \
+        libcap2-bin \
         libcups2-dev \
         libfontconfig1-dev \
         libgstreamer-plugins-base1.0-dev \

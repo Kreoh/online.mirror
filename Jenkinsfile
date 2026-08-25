@@ -74,6 +74,11 @@ pipeline {
                         engine/distro-configs/OnlineLinuxCommon.conf \
                         engine/distro-configs/OnlineLinux-LOKit.conf
                     grep -Fq 'INCLUDE:OnlineLinuxCommon' engine/distro-configs/OnlineLinux-LOKit.conf
+                    grep -Fqx -- '--disable-python' engine/distro-configs/OnlineLinux-LOKit.conf
+                    grep -Fqx -- '--without-java' engine/distro-configs/OnlineLinux-LOKit.conf
+                    ! grep -Eq -- '--enable-python|--with-python' \
+                        engine/distro-configs/OnlineLinuxCommon.conf \
+                        engine/distro-configs/OnlineLinux-LOKit.conf
                     grep -Fq -- '--with-distro=OnlineLinux-LOKit' docker/from-source/build.sh
                     grep -Fq -- '--with-lo-builddir="$BUILDDIR"/online/engine' docker/from-source/build.sh
                     grep -Fq -- '--with-lo-path=/opt/online-office' docker/from-source/build.sh
@@ -85,6 +90,7 @@ pipeline {
                     test ! -e browser/images/collabora-office-white.svg
                     grep -Fq 'background-image: none;' browser/css/backstage.css
                     bash docker/from-source/test-debranding.sh
+                    bash docker/from-source/test-distroless.sh
                 '''
             }
         }
@@ -97,10 +103,16 @@ pipeline {
             steps {
                 sh '''
                     set -eu
+                    export DOCKER_BUILDKIT=1
+                    docker buildx version >/dev/null
                     builder_tag="$IMAGE_BASE_NAME:source-builder"
                     docker build \
                         -t "$builder_tag" \
                         -f docker/from-source/Builder.Dockerfile \
+                        docker/from-source
+                    docker build --no-cache \
+                        --build-arg "BUILDER_IMAGE=$builder_tag" \
+                        -f docker/from-source/CapabilityProbe.Dockerfile \
                         docker/from-source
                     uid="$(id -u)"
                     gid="$(id -g)"
@@ -121,7 +133,6 @@ pipeline {
                         -e DOCKER_HUB_REPO="$IMAGE_BASE_NAME" \
                         -e DOCKER_HUB_TAG="$IMAGE_TAG" \
                         -e ONLINE_OFFICE_SOURCE_REVISION="$ONLINE_OFFICE_SOURCE_REVISION" \
-                        -e ONLINE_OFFICE_SOURCE_BUILD_HOST_OS=Debian \
                         -e ONLINE_OFFICE_SOURCE_CACHE_DIR=/workspace-cache/build \
                         -e CCACHE_DIR=/workspace-cache/ccache \
                         -e HOME=/workspace-cache/home \
@@ -137,7 +148,7 @@ pipeline {
                         -e DOCKER_HUB_REPO="$IMAGE_BASE_NAME" \
                         -e DOCKER_HUB_TAG="$IMAGE_TAG" \
                         -e ONLINE_OFFICE_SOURCE_REVISION="$ONLINE_OFFICE_SOURCE_REVISION" \
-                        -e ONLINE_OFFICE_SOURCE_BUILD_HOST_OS=Debian \
+                        -e ONLINE_OFFICE_FINAL_DOCKERFILE=Distroless \
                         -e ONLINE_OFFICE_SOURCE_CACHE_DIR=/workspace-cache/build \
                         -e CCACHE_DIR=/workspace-cache/ccache \
                         -e HOME=/workspace-cache/home \
@@ -149,9 +160,12 @@ pipeline {
                             "$IMAGE_BASE_NAME:$IMAGE_TAG"
                     )
                     test "$revision" = "$ONLINE_OFFICE_SOURCE_REVISION"
-                    python3 docker/from-source/debrand.py scan-image "$IMAGE_BASE_NAME:$IMAGE_TAG"
-                    docker run --rm --entrypoint /bin/sh "$IMAGE_BASE_NAME:$IMAGE_TAG" -ec \
-                        'test ! -e /usr/share/coolwsd/browser/dist/images/collabora-office-white.svg'
+                    runtime_route=$(
+                        docker image inspect \
+                            --format '{{ index .Config.Labels "io.kreoh.online-office.runtime" }}' \
+                            "$IMAGE_BASE_NAME:$IMAGE_TAG"
+                    )
+                    test "$runtime_route" = distroless-source
                 '''
             }
         }

@@ -482,10 +482,110 @@ def docker_json(arguments: list[str]) -> object:
     return json.loads(result.stdout)
 
 
-def scan_image(image: str) -> None:
+def assert_distroless_runtime(rootfs: Path) -> None:
+    forbidden_paths = (
+        "bin/sh",
+        "bin/bash",
+        "bin/busybox",
+        "usr/bin/sh",
+        "usr/bin/bash",
+        "usr/bin/busybox",
+        "usr/bin/apt",
+        "usr/bin/apt-get",
+        "usr/bin/dpkg",
+        "usr/bin/rpm",
+        "sbin/apk",
+        "usr/bin/python",
+        "usr/bin/python3",
+        "usr/bin/java",
+        "usr/bin/javac",
+        "usr/bin/ssh",
+        "usr/bin/gcc",
+        "usr/bin/g++",
+        "usr/bin/make",
+        "usr/bin/nano",
+        "usr/bin/vi",
+        "usr/bin/coolconfig",
+        "usr/bin/coolconvert",
+        "usr/bin/coolstress",
+        "usr/bin/coolwsd-systemplate-setup",
+    )
+    for relative in forbidden_paths:
+        if (rootfs / relative).exists():
+            raise RuntimeError(f"forbidden runtime path is present: /{relative}")
+
+    forbidden_names = re.compile(
+        r"(?:^python(?:[0-9.]*)?$|pyuno|pythonloader|libpython|libjvm|"
+        r"javasettings|javavendors|libjvmaccess|libjvmfwk|sunjavaplugin|javaldx|"
+        r"\.py[co]?$|\.jar$|\.class$)",
+        re.IGNORECASE,
+    )
+    for path in rootfs.rglob("*"):
+        if forbidden_names.search(path.name):
+            raise RuntimeError(f"Python, PyUNO or Java content is present: {path}")
+
+    if not (rootfs / "usr/lib/locale/locale-archive").is_file():
+        raise RuntimeError("C.UTF-8 locale archive is absent")
+    if not (rootfs / "etc/ssl/certs/ca-certificates.crt").is_file():
+        raise RuntimeError("CA trust bundle is absent")
+    for font_root in (
+        rootfs / "usr/share/fonts",
+        rootfs / "opt/cool/systemplate/usr/share/fonts",
+    ):
+        if font_root.exists() and any(path.is_file() for path in font_root.rglob("*")):
+            raise RuntimeError(f"external system font leaked into runtime: {font_root}")
+
+
+def scan_image(
+    image: str,
+    neutral_favicon: Path,
+    expected_revision: str,
+    *,
+    distroless: bool,
+) -> None:
     inspect = docker_json(["image", "inspect", image])
     serialised = json.dumps(inspect, sort_keys=True)
     violations = mark_violations(Path("OCI image configuration"), serialised)
+
+    if not isinstance(inspect, list) or len(inspect) != 1:
+        raise RuntimeError("Docker returned an unexpected image inspection result")
+    config = inspect[0].get("Config", {})
+    labels = config.get("Labels", {})
+    revision = labels.get("org.opencontainers.image.revision", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise RuntimeError("OCI revision label is not a full lower-case Git revision")
+    if revision != expected_revision:
+        raise RuntimeError(
+            "OCI revision label differs from the requested source revision"
+        )
+    if labels.get("org.opencontainers.image.title") != PRODUCT_NAME:
+        raise RuntimeError("OCI title is not Online Office")
+    if labels.get("org.opencontainers.image.source") != (
+        "https://github.com/Kreoh/online.mirror"
+    ):
+        raise RuntimeError("OCI source label differs from the admitted repository")
+    if config.get("User") != "100":
+        raise RuntimeError("OCI runtime user is not UID 100")
+    expected_entrypoint = [
+        "/usr/bin/coolwsd",
+        "--use-env-vars",
+        "--o:sys_template_path=/opt/cool/systemplate",
+        "--o:child_root_path=/opt/cool/child-roots",
+        "--o:file_server_root_path=/usr/share/coolwsd",
+        "--o:cache_files.path=/opt/cool/cache",
+        "--o:logging.color=false",
+        "--o:stop_on_config_change=true",
+    ]
+    if config.get("Entrypoint") != expected_entrypoint:
+        raise RuntimeError("OCI entrypoint differs from the direct coolwsd contract")
+    if distroless:
+        if labels.get("io.kreoh.online-office.runtime") != "distroless-source":
+            raise RuntimeError("OCI runtime label is not the source distroless route")
+        healthcheck = config.get("Healthcheck", {}).get("Test")
+        if healthcheck != ["CMD", "/usr/bin/coolwsd", "--probe", "--use-env-vars"]:
+            raise RuntimeError(
+                "OCI healthcheck differs from the shell-free probe contract"
+            )
 
     history_result = subprocess.run(
         [
@@ -504,20 +604,32 @@ def scan_image(image: str) -> None:
     violations.extend(mark_violations(Path("OCI image history"), history_result.stdout))
     fail_on_violations(violations)
 
-    command = r"""set -eu
-test ! -e /opt/online-office/EULA_en-US.rtf
-test ! -e /usr/share/coolwsd/browser/dist/welcome
-test -e /usr/share/doc/coolwsd/online-office-sbom.spdx.json
-test ! -e /usr/share/doc/coolwsd/collabora-online-sbom.spdx.json
-grep -Eq '^ProductKey=Online Office [0-9]' /opt/online-office/program/bootstraprc
-grep -Fq 'UserInstallation=$SYSUSERCONFIG/onlineoffice/4' /opt/online-office/program/bootstraprc
-grep -Fq '"name": "Online Office"' /usr/share/doc/coolwsd/online-office-sbom.spdx.json
-"""
-    subprocess.run(
-        ["docker", "run", "--rm", "--entrypoint", "/bin/sh", image, "-ec", command],
+    container = subprocess.run(
+        ["docker", "create", "--entrypoint", "/usr/bin/coolwsd", image, "--version"],
         check=True,
-    )
-    print("Online Office OCI metadata and runtime identity scan passed.")
+        stdout=subprocess.PIPE,
+        text=True,
+    ).stdout.strip()
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            rootfs = Path(directory) / "rootfs"
+            rootfs.mkdir()
+            subprocess.run(
+                ["docker", "cp", f"{container}:/.", str(rootfs)],
+                check=True,
+            )
+            scan_rootfs(rootfs, neutral_favicon.resolve())
+            if distroless:
+                assert_distroless_runtime(rootfs)
+    finally:
+        subprocess.run(
+            ["docker", "rm", "-f", container],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    route = "distroless" if distroless else "diagnostic"
+    print(f"Online Office {route} OCI metadata and rootfs scan passed.")
 
 
 def self_test() -> None:
@@ -605,6 +717,33 @@ def self_test() -> None:
         assert not demo.exists()
         assert (source_root / "favicon.ico").read_bytes() == neutral_icon
 
+    with tempfile.TemporaryDirectory() as directory:
+        rootfs = Path(directory)
+        (rootfs / "usr/lib/locale").mkdir(parents=True)
+        (rootfs / "usr/lib/locale/locale-archive").write_bytes(b"locale")
+        (rootfs / "etc/ssl/certs").mkdir(parents=True)
+        (rootfs / "etc/ssl/certs/ca-certificates.crt").write_bytes(b"ca")
+        assert_distroless_runtime(rootfs)
+        forbidden_python = rootfs / "opt/online-office/program/libpython3.13.so"
+        forbidden_python.parent.mkdir(parents=True)
+        forbidden_python.write_bytes(b"python")
+        try:
+            assert_distroless_runtime(rootfs)
+        except RuntimeError as error:
+            assert "Python, PyUNO or Java" in str(error)
+        else:
+            raise AssertionError("Python runtime fixture was accepted")
+        forbidden_python.unlink()
+        external_font = rootfs / "usr/share/fonts/debian-font.ttf"
+        external_font.parent.mkdir(parents=True)
+        external_font.write_bytes(b"font")
+        try:
+            assert_distroless_runtime(rootfs)
+        except RuntimeError as error:
+            assert "external system font" in str(error)
+        else:
+            raise AssertionError("external system font fixture was accepted")
+
     print("Online Office debranding helper self-test passed.")
 
 
@@ -624,8 +763,11 @@ def main() -> None:
     rootfs_scan_parser.add_argument("rootfs", type=Path)
     rootfs_scan_parser.add_argument("neutral_favicon", type=Path)
 
-    image_parser = subparsers.add_parser("scan-image")
-    image_parser.add_argument("image")
+    for command in ("scan-image", "scan-distroless-image"):
+        image_parser = subparsers.add_parser(command)
+        image_parser.add_argument("image")
+        image_parser.add_argument("neutral_favicon", type=Path)
+        image_parser.add_argument("expected_revision")
     subparsers.add_parser("self-test")
 
     arguments = parser.parse_args()
@@ -637,8 +779,13 @@ def main() -> None:
         apply_rootfs(arguments.rootfs.resolve(), arguments.source_root.resolve())
     elif arguments.command == "scan-rootfs":
         scan_rootfs(arguments.rootfs.resolve(), arguments.neutral_favicon.resolve())
-    elif arguments.command == "scan-image":
-        scan_image(arguments.image)
+    elif arguments.command in {"scan-image", "scan-distroless-image"}:
+        scan_image(
+            arguments.image,
+            arguments.neutral_favicon,
+            arguments.expected_revision,
+            distroless=arguments.command == "scan-distroless-image",
+        )
     else:
         self_test()
 
