@@ -90,7 +90,6 @@ pipeline {
                     test ! -e browser/images/collabora-office-white.svg
                     grep -Fq 'background-image: none;' browser/css/backstage.css
                     bash docker/from-source/test-debranding.sh
-                    bash docker/from-source/test-distroless.sh
                 '''
             }
         }
@@ -110,6 +109,11 @@ pipeline {
                         -t "$builder_tag" \
                         -f docker/from-source/Builder.Dockerfile \
                         docker/from-source
+                    docker run --rm \
+                        -v "$PWD:/workspace:ro" \
+                        -w /workspace \
+                        "$builder_tag" \
+                        bash docker/from-source/test-distroless.sh
                     docker build --no-cache \
                         --build-arg "BUILDER_IMAGE=$builder_tag" \
                         -f docker/from-source/CapabilityProbe.Dockerfile \
