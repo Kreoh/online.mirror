@@ -72,7 +72,7 @@ namespace BackstageTemplates {
   export function header(props: HeaderProps): HTMLElement {
     return (
       <div class="backstage-header">
-        <span class="backstage-header-title">Collabora Office</span>
+        <span class="backstage-header-title">Online Office</span>
         {props.isStarterMode || !props.closeButtonEnabled
           ? null
           : closeButton(props.onClose)}

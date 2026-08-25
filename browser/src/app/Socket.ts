@@ -292,6 +292,8 @@ class Socket {
 
 	public connect(socket: SockInterface): void {
 		const map = this._map;
+		map._docHasPasswordToModify = false;
+		map._modifyPasswordProvided = false;
 		map.options.docParams['permission'] = app.getPermission();
 		if (this.socket) {
 			this.close();
@@ -313,7 +315,7 @@ class Socket {
 							'{productname}',
 							typeof brandProductName !== 'undefined'
 								? brandProductName
-								: 'Collabora Online Development Edition (unbranded)',
+								: 'Online Office',
 						) + e,
 					cmd: 'socket',
 					kind: 'failed',
@@ -853,8 +855,9 @@ class Socket {
 			return false;
 		}
 
-		const center = this._map.getCenter();
-		if (isNaN(center.x) || isNaN(center.y) || isNaN(this._map.getZoom())) {
+		// The map zoom is set during map init, so a valid zoom means the map is
+		// initialised (the viewed rectangle / scroll comes from the layout now).
+		if (isNaN(this._map.getZoom())) {
 			return false;
 		}
 
@@ -1288,6 +1291,14 @@ class Socket {
 				app.console.error('Failed to parse proxycall: ' + ex);
 			}
 			return;
+		} else if (textMsg.startsWith('consolemsg ')) {
+			let newline = textMsg.indexOf('\n');
+			if (newline === -1) newline = textMsg.length;
+			this._map.fire('consolemsg', {
+				level: textMsg.substring('consolemsg '.length, newline),
+				message: textMsg.substring(newline + 1),
+			});
+			return;
 		} else if (textMsg.startsWith('legacyunoapinotice:')) {
 			this._map.fire('legacyunoapinotice');
 			return;
@@ -1296,6 +1307,16 @@ class Socket {
 			return;
 		} else if (textMsg.startsWith('filemode:')) {
 			this._onFileModeMsg(textMsg);
+		} else if (textMsg.startsWith('haspasswordtomodify:')) {
+			this._map._docHasPasswordToModify = true;
+			this._map._modifyPasswordProvided = false;
+			return;
+		} else if (textMsg.startsWith('editwithpassword:')) {
+			if (textMsg.substring('editwithpassword:'.length).trim() === 'success') {
+				this._map._modifyPasswordProvided = true;
+				this._map._proceedEditMode();
+			}
+			return;
 		} else if (textMsg.startsWith('lockfailed:')) {
 			this._map.onLockFailed(textMsg.substring('lockfailed:'.length).trim());
 			return;
@@ -1934,7 +1955,7 @@ class Socket {
 						'{productname}',
 						typeof brandProductName !== 'undefined'
 							? brandProductName
-							: 'Collabora Online Development Edition (unbranded)',
+							: 'Online Office',
 					);
 					msg = msg.replace('{0}', window.expectedServerId);
 					msg = msg.replace('{1}', window.routeToken);
@@ -2433,6 +2454,22 @@ class Socket {
 			const msg = _('Only the document owner can change the password.');
 			this._map.uiManager.showInfoModal('cool_alert', '', msg, '', _('OK'));
 			return true; // caller should exit immediately.
+		} else if (
+			textMsg.startsWith('error:') &&
+			command.errorCmd === 'editwithpassword'
+		) {
+			this._map.hideBusy();
+			this._map._modifyPasswordProvided = false;
+			if (command.errorKind === 'wrongpassword') {
+				this._map._askForPasswordToModify(true);
+			} else {
+				const msg =
+					command.errorKind === 'notallowed'
+						? _('You do not have permission to edit this document.')
+						: _('The document could not be made editable.');
+				this._map.uiManager.showInfoModal('cool_alert', '', msg, '', _('OK'));
+			}
+			return true; // caller should exit immediately.
 		} else if (textMsg.startsWith('error:') && !this._map._docLayer) {
 			textMsg = textMsg.substring(6);
 			if (command.errorKind === 'hardlimitreached') {
@@ -2508,7 +2545,7 @@ class Socket {
 				'{productname}',
 				typeof brandProductName !== 'undefined'
 					? brandProductName
-					: 'Collabora Online Development Edition (unbranded)',
+					: 'Online Office',
 			);
 			this._map.fire('infobar', {
 				msg: textMsg,

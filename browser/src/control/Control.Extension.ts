@@ -98,12 +98,145 @@
 
 /* global app */
 
+// A command an extension registers for use in menu/notebookbar contributions
+// (see ExtensionContributes below).  `script` is a path to a JS file (resolved
+// the same way `entry`/`icon` are, relative to the manifest) whose top-level
+// binding named `commands` is an object mapping command ids to functions;
+// discovery fetches it once and fills in `source` with the raw text.
+// invokeCommand ships that text to the kit's JS-UNO context verbatim, with a
+// call to the right entry of `commands` tacked on after it, the same way
+// cool.callRemote ships a function's source from inside the sidebar iframe.
+// More than one command may name the same `script` file, sharing its
+// `commands` object rather than each getting a one-function file of its own.
+// `icon` is shown on a notebookbar button or dropdown-menu entry that
+// references this command; the classic menu never renders it.
+interface ExtensionCommand {
+	id: string;
+	title: string;
+	icon?: string;
+	script: string;
+	source?: string;
+}
+
+// One notebookbar button, referencing a command declared in
+// contributes.commands.  Its label/icon come from that command, not from
+// this item, so the same command reads the same wherever it's placed.
+// `size` chooses bigcustomtoolitem (icon above label) or customtoolitem
+// (icon inline with label); defaults to 'small'.
+interface ExtensionNotebookbarButton {
+	type: 'button';
+	command: string;
+	size?: 'large' | 'small';
+}
+
+// A vertical divider between items within a notebookbar group.
+interface ExtensionNotebookbarSeparator {
+	type: 'separator';
+}
+
+// A notebookbar dropdown button.  `items` is deliberately flat - one level
+// of commands, no nested menu - there is no submenu-of-a-submenu case to
+// design or validate.
+interface ExtensionNotebookbarMenu {
+	type: 'menu';
+	title: string;
+	icon?: string;
+	items: { command: string }[];
+}
+
+type ExtensionNotebookbarItem =
+	| ExtensionNotebookbarButton
+	| ExtensionNotebookbarSeparator
+	| ExtensionNotebookbarMenu;
+
+// A labeled cluster of notebookbar items, corresponding to one ribbon group
+// (e.g. Writer's "Clipboard" or "Font" group).  `label` is the caption shown
+// under the group; `id` only identifies the group in a console warning about
+// one of its own items (an unknown command or item type) - it does not need
+// to be unique, not even within this one group array.
+interface ExtensionNotebookbarGroup {
+	id: string;
+	label: string;
+	items: ExtensionNotebookbarItem[];
+}
+
+// Places in the classic menu and the notebookbar an extension can put its
+// commands into, without needing its sidebar `entry` (if any) to be open.
+// `menus` maps an existing top-level menu id (the `id` field already used in
+// each doc type's static menu array in Control.Menubar.ts, e.g. 'insert') to
+// the command ids appended to the end of that menu.  `notebookbar` is a list
+// of brand-new tabs the extension adds to the ribbon; each names its own
+// `tab` label, positions itself relative to an existing tab via
+// `insertBefore`/`insertAfter` (mutually exclusive; omitting both appends it
+// at the end), and lays out its own content as `groups` of the three item
+// kinds above - not raw notebookbar item JSON, so an extension can't place
+// arbitrary layout into the ribbon.
+interface ExtensionNotebookbarTab {
+	tab: string;
+	insertBefore?: string;
+	insertAfter?: string;
+	groups: ExtensionNotebookbarGroup[];
+}
+
+// One entry an extension adds to the document's right-click context menu.
+// Every extension's entries render together as their own trailing group, after
+// a separator, at the end of the menu - never interleaved with the document's
+// own items, the same "own space only" rule the notebookbar tab and menu
+// contributions above follow.  `contexts` narrows which right-click menu the
+// entry shows up in; omitting it (or passing an empty array) shows the entry
+// in every right-click menu the manifest's top-level `supports` already
+// allows this extension into.
+interface ExtensionContextMenuEntry {
+	command: string;
+	contexts?: ('text-selection' | 'image')[];
+}
+
+// One entry an extension adds to the floating toolbar that appears over a mouse
+// text selection. That toolbar only ever shows on desktop, outside read-only mode
+// and outside Calc, and only while a selection exists, so unlike the context menu
+// there is no separate `contexts` field to narrow it further. Every extension's
+// buttons share one separator after the toolbar's own built-in content.
+interface ExtensionContextToolbarButton {
+	command: string;
+}
+
+// A single key bound to a command. `modifier` is drawn from "ctrl"/"alt"/"shift" -
+// "ctrl" already means Cmd on macOS, the same as it does for every built-in
+// keyboard shortcut. A key combination that collides with an existing shortcut
+// (built-in, or from another extension) is dropped with a console warning rather
+// than registered, since two shortcuts sharing the same combination is something
+// the underlying dispatch mechanism cannot recover from at the point the key is
+// actually pressed. A single printable key needs at least "ctrl" or "alt" in
+// modifier - "shift" alone (or no modifier at all) would fight with ordinary typing.
+interface ExtensionKeybinding {
+	command: string;
+	key: string;
+	modifier?: ('ctrl' | 'alt' | 'shift')[];
+}
+
+interface ExtensionContributes {
+	commands?: ExtensionCommand[];
+	menus?: { [menuId: string]: string[] };
+	notebookbar?: ExtensionNotebookbarTab[];
+	contextMenu?: ExtensionContextMenuEntry[];
+	contextToolbar?: ExtensionContextToolbarButton[];
+	keybindings?: ExtensionKeybinding[];
+}
+
 interface ExtensionManifest {
 	manifestVersion: string;
 	name: string;
-	entry: string;
+	// Absent for a commands-only extension that contributes no sidebar panel.
+	entry?: string;
 	icon?: string;
 	supports?: string[];
+	// On disk this is a string naming a separate JSON file (resolved the same way
+	// entry/icon are) holding the ExtensionContributes object - keeping UI wiring
+	// out of manifest.json's own metadata is mandatory, not a choice an extension
+	// author makes. loadExtensions resolves that indirection once, at discovery
+	// time, so this field is always the object form by the time anything else
+	// reads it.
+	contributes?: ExtensionContributes;
 }
 
 interface ExtensionCallMessage {
@@ -201,6 +334,18 @@ window.L.Control.Extension = window.L.Control.extend({
 	_panel: null as HTMLDivElement | null,
 	_iframe: null as HTMLIFrameElement | null,
 	_teardownTimer: null as ReturnType<typeof setTimeout> | null,
+	// Correlates executescript callIds issued directly by invokeCommand (menu clicks) with
+	// their completion callbacks, so _onScriptResult can tell them apart from callIds that
+	// originated inside the sidebar iframe and must be relayed back there instead.
+	// invokeCommand is void and returns no Promise, so these are plain callbacks, not a
+	// stashed resolve/reject pair - nothing awaits them.
+	_pendingCommandCalls: null as {
+		[callId: string]: {
+			onSuccess: (value: unknown) => void;
+			onError: (err: Error) => void;
+		};
+	} | null,
+	_nextCommandCallId: 0,
 	// One modal dialog per extension at a time.  origRemove holds the un-hooked
 	// L.IFrameDialog.remove so _closeDialog can dismiss without re-entering the
 	// user-close override installed in _openDialog.
@@ -213,10 +358,23 @@ window.L.Control.Extension = window.L.Control.extend({
 	onAdd: function (map: any) {
 		this.map = map;
 		this._setToolitemHighlight(false);
+		this._pendingCommandCalls = {};
 		window.addEventListener('message', this._onPostMessage.bind(this));
 		map.on('executescriptresult', this._onScriptResult, this);
 		map.on('proxycall', this._onProxyCall, this);
+		map.on('consolemsg', this._onConsoleMsg, this);
 		map.on('comment', this._onComment, this);
+	},
+
+	_onConsoleMsg: function (e: { level: string; message: string }) {
+		const fn = (console as any)[e.level];
+		if (e.level === 'assert') {
+			console.assert(false, e.message);
+		} else if (typeof fn === 'function') {
+			fn.call(console, e.message);
+		} else {
+			console.log('unkown level: ' + e.level + ', message: ' + e.message);
+		}
 	},
 
 	// The extension iframe is our own content from the COOL origin.  The mobile and desktop
@@ -273,6 +431,76 @@ window.L.Control.Extension = window.L.Control.extend({
 			method: e.method,
 			args: e.args,
 		});
+	},
+
+	// Dispatcher entry point for a contributed menu command (docdispatcher's
+	// `ext:<id>:<commandId>` branch).  Ships the command's script straight to the
+	// kit's JS-UNO context via the same executescript wire message
+	// _handleSidebarMessage's Extension_Call case uses, but without needing the
+	// sidebar iframe to exist: the command runs whether or not this extension's
+	// panel has ever been opened.
+	invokeCommand: function (commandId: string): void {
+		const commands = this.options.manifest.contributes
+			? this.options.manifest.contributes.commands
+			: undefined;
+		const command =
+			commands && commands.find((c: ExtensionCommand) => c.id === commandId);
+		if (!command || command.source === undefined) {
+			console.warn(
+				'extension ' + this.options.id + ': unknown command ' + commandId,
+			);
+			return;
+		}
+		const callId = 'cmd-' + this.options.id + '-' + this._nextCommandCallId++;
+		this._pendingCommandCalls[callId] = {
+			onSuccess: function () {
+				// Menu commands run for effect; nothing consumes their return
+				// value today.
+			},
+			onError: (err: Error) => {
+				console.error(
+					'extension ' +
+						this.options.id +
+						': command ' +
+						commandId +
+						' failed:',
+					err,
+				);
+				if (this.map.uiManager) {
+					this.map.uiManager.showSnackbar(
+						_('Extension command failed: %1').replace('%1', err.message),
+					);
+				}
+			},
+		};
+		// Nothing clears this entry on its own if the kit never answers - document
+		// teardown mid-command, a dropped socket, or the command itself hanging. Bound
+		// how long it can wait, the same way _removePanel bounds the teardown handshake.
+		setTimeout(() => {
+			const pending = this._pendingCommandCalls[callId];
+			if (!pending) return;
+			delete this._pendingCommandCalls[callId];
+			pending.onError(new Error('timed out waiting for a response'));
+		}, 30000);
+		// Wire format `executescript <id> <line> <source>\n<script>` (see
+		// ChildSession::executeScript), matching what _handleSidebarMessage's
+		// Extension_Call case sends for a cool.callRemote call: source/line let
+		// a thrown exception's stack frames point back at the command's own file.
+		// The script is command.source verbatim, with the call to invoke tacked on
+		// after it rather than wrapped around it - nothing is prepended, so the
+		// file's own line 1 column 1 stays line 1 column 1 in any reported frame.
+		const source = (this.options.baseUrl + command.script).replace(/\n/g, '');
+		app.socket.sendMessage(
+			'executescript ' +
+				callId +
+				' 1 ' +
+				source +
+				'\n' +
+				command.source +
+				'\ncommands[' +
+				JSON.stringify(commandId) +
+				'].apply(null, []);',
+		);
 	},
 
 	// Dispatcher entry point.  The notebookbar Extensions tab fires
@@ -440,12 +668,12 @@ window.L.Control.Extension = window.L.Control.extend({
 					'executescript ' +
 						msg.callId +
 						' ' +
-						msg.line +
+						(msg.line - 1) +
 						' ' +
 						msg.source.replace(/\n/g, '') +
-						'\n(' +
+						'\n(\n' +
 						msg.fn +
-						').apply(null, ' +
+						'\n).apply(null, ' +
 						JSON.stringify(msg.args || []) +
 						');',
 				);
@@ -587,13 +815,45 @@ window.L.Control.Extension = window.L.Control.extend({
 		});
 	},
 
+	// Reconstructs a proper Error from the engine's jsuno::Exception payload, the
+	// same way cool.js's makeStructuredError does for a cool.callRemote call: the
+	// stack text lets the browser console show the command's own source location
+	// for each frame rather than just a bare message.
+	_toScriptError: function (err: string | ExtensionScriptError): Error {
+		if (typeof err === 'string') return new Error(err);
+		const e = new Error(err.message || '');
+		e.name = err.name || 'Error';
+		let stackText = e.name + ': ' + e.message;
+		for (const f of err.stack || []) {
+			stackText +=
+				'\n    at ' +
+				(f.functionName || '<anonymous>') +
+				' (' +
+				(f.source || '') +
+				':' +
+				f.line +
+				':' +
+				f.column +
+				')';
+		}
+		e.stack = stackText;
+		return e;
+	},
+
 	_onScriptResult: function (e: ExtensionScriptResult) {
-		this._postToIframe({
-			msgId: 'Extension_CallResult',
-			callId: e.id,
-			ok: e.ok,
-			err: e.err,
-		});
+		const pending = this._pendingCommandCalls[e.id];
+		if (pending) {
+			delete this._pendingCommandCalls[e.id];
+			if (e.err !== undefined) pending.onError(this._toScriptError(e.err));
+			else pending.onSuccess(e.ok);
+		} else {
+			this._postToIframe({
+				msgId: 'Extension_CallResult',
+				callId: e.id,
+				ok: e.ok,
+				err: e.err,
+			});
+		}
 		if (e.legacyUnoApi) {
 			this.map.uiManager.showLegacyUnoApiSnackbarOnce();
 		}
@@ -665,6 +925,53 @@ window.L.loadExtensions = async function (map: any, docType: string) {
 				const resp = await fetch(app.LOUtil.getURL(baseRel + 'manifest.json'));
 				if (!resp.ok) throw new Error('HTTP ' + resp.status);
 				const manifest: ExtensionManifest = await resp.json();
+				// contributes is a string naming a separate JSON file (resolved the same way
+				// entry/icon are) holding the actual object, keeping manifest.json itself
+				// short and scannable regardless of how much UI an extension wires up.
+				// Replace it with the fetched object here, once, so every later reader of
+				// manifest.contributes (including the rest of this function) sees only the
+				// object form and never has to know it started out as a path.
+				if (manifest.contributes) {
+					const uiPath = manifest.contributes as unknown as string;
+					try {
+						const uiResp = await fetch(app.LOUtil.getURL(baseRel + uiPath));
+						if (!uiResp.ok) throw new Error('HTTP ' + uiResp.status);
+						manifest.contributes = await uiResp.json();
+					} catch (err) {
+						console.warn(
+							'extension ' +
+								id +
+								': contributes file "' +
+								uiPath +
+								'" unreadable:',
+							err,
+						);
+						manifest.contributes = undefined;
+					}
+				}
+				if (manifest.contributes && manifest.contributes.commands) {
+					await Promise.all(
+						manifest.contributes.commands.map(async (command) => {
+							try {
+								const scriptResp = await fetch(
+									app.LOUtil.getURL(baseRel + command.script),
+								);
+								if (!scriptResp.ok)
+									throw new Error('HTTP ' + scriptResp.status);
+								command.source = await scriptResp.text();
+							} catch (err) {
+								console.warn(
+									'extension ' +
+										id +
+										': command ' +
+										command.id +
+										' script unreadable:',
+									err,
+								);
+							}
+						}),
+					);
+				}
 				return { id, baseRel, manifest };
 			} catch (err) {
 				console.warn('extension ' + id + ': failed to load:', err);

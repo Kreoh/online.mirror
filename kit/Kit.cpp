@@ -370,7 +370,7 @@ namespace
         switch (type)
         {
             case LinkOrCopyType::LO:
-                return "CollaboraOffice";
+                return "OnlineOffice";
             case LinkOrCopyType::All:
                 return "all";
             default:
@@ -854,6 +854,8 @@ Document::Document(const std::shared_ptr<COKit>& loKit, const std::string& jailI
     , _haveDocPassword(false)
     , _isDocPasswordProtected(false)
     , _docPasswordType(DocumentPasswordType::ToView)
+    , _hasPasswordToModify(false)
+    , _haveDocPasswordToModify(false)
     , _stop(false)
     , _deltaGen(new DeltaGenerator())
     , _editorId(-1)
@@ -1033,13 +1035,38 @@ std::size_t Document::purgeSessions()
 /// Set Document password for given URL
 void Document::setDocumentPassword(COKitCallbackType passwordType)
 {
-    // Log whether the document is password protected and a password is provided
-    LOG_INF("setDocumentPassword: passwordProtected=" << _isDocPasswordProtected <<
-            " passwordProvided=" << _haveDocPassword);
+    const bool toModify = (passwordType == COKitCallbackType::DOCUMENT_PASSWORD_TO_MODIFY);
 
-    if (!isLoaded() && _isDocPasswordProtected && _haveDocPassword)
+    // Log whether the document is password protected and a password is provided
+    LOG_INF("setDocumentPassword: passwordProtected=" << _isDocPasswordProtected
+                                                      << " passwordProvided=" << _haveDocPassword
+                                                      << " toModify=" << toModify);
+
+    if (isLoaded())
     {
-        // it means this is the second attempt with the wrong password; abort the load operation
+        if (!toModify)
+        {
+            _loKit->setDocumentPassword(_jailedUrl.c_str(),
+                                        _haveDocPassword ? _docPassword.c_str() : nullptr);
+            return;
+        }
+
+        if (_haveDocPasswordToModify)
+        {
+            _loKit->setDocumentPassword(_jailedUrl.c_str(), _docPasswordToModify.c_str());
+            _haveDocPasswordToModify = false;
+            _docPasswordToModify.clear();
+            return;
+        }
+
+        // No password to modify is stored. Answer without one, which keeps the
+        // document read-only.
+        _loKit->setDocumentPassword(_jailedUrl.c_str(), nullptr);
+        return;
+    }
+
+    if (_isDocPasswordProtected && _haveDocPassword)
+    {
         _loKit->setDocumentPassword(_jailedUrl.c_str(), nullptr);
         return;
     }
@@ -1057,6 +1084,13 @@ void Document::setDocumentPassword(COKitCallbackType passwordType)
     else
         _loKit->setDocumentPassword(_jailedUrl.c_str(), nullptr);
     LOG_INF("setDocumentPassword returned.");
+}
+
+void Document::setDocPasswordToModify(const std::string& password)
+{
+    LOG_INF("setDocPasswordToModify");
+    _docPasswordToModify = password;
+    _haveDocPasswordToModify = true;
 }
 
 void Document::renderTiles(TileCombined &tileCombined)
@@ -1551,9 +1585,8 @@ void Document::handleSaveMessage(const std::string &)
         LOG_TRC("BgSave completed");
 
         // unregister the view callbacks
-        const int viewCount = getLOKitDocument()->getViewsCount();
-        std::vector<int> viewIds(viewCount);
-        getLOKitDocument()->getViewIds(viewIds.data(), viewCount);
+        std::vector<int> viewIds;
+        getLOKitDocument()->getViewIds(viewIds);
         for (const auto viewId : viewIds)
         {
             _loKitDocument->setView(viewId);
@@ -1833,9 +1866,8 @@ void replaceKeysWithPlaceholder(std::string& json, std::initializer_list<std::st
 void Document::notifyViewInfo()
 {
     // Get the list of view ids from the core
-    const int viewCount = getLOKitDocument()->getViewsCount();
-    std::vector<int> viewIds(viewCount);
-    getLOKitDocument()->getViewIds(viewIds.data(), viewCount);
+    std::vector<int> viewIds;
+    getLOKitDocument()->getViewIds(viewIds);
 
     const std::map<int, UserInfo> viewInfoMap = getViewInfo();
 
@@ -1913,7 +1945,7 @@ void Document::notifyViewInfo()
             oss << "},";
         }
 
-        if (viewCount > 0)
+        if (viewIds.size() > 0)
             oss.seekp(-1, std::ios_base::cur); // Remove last comma.
 
         oss << ']';
@@ -2249,6 +2281,9 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
         _docPassword = docPassword;
         _jailedUrl = loadUri;
         _isDocPasswordProtected = false;
+        _hasPasswordToModify = false;
+        _haveDocPasswordToModify = false;
+        _docPasswordToModify.clear();
 
         const char* url = loadUri.c_str();
         LOG_DBG("Calling lokit::documentLoad(" << anonymizeUrl(url) << ", \"" << options << "\")");
@@ -2321,6 +2356,13 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
         // Only save the options on opening the document.
         // No support for changing them after opening a document.
         _renderOpts = renderOpts;
+
+        // Whether the document carries a separate password required to modify it.
+        const std::string hasPasswordToModify(
+            _loKitDocument->getCommandValues(".uno:HasPasswordToModify"));
+        _hasPasswordToModify = hasPasswordToModify.find("true") != std::string::npos;
+        if (_hasPasswordToModify)
+            LOG_INF("Document [" << uriAnonym << "] has a password to modify.");
     }
     else
     {
@@ -2416,6 +2458,10 @@ std::shared_ptr<COKitDocument> Document::load(const std::shared_ptr<ChildSession
             _loKitDocument->setAllowManageRedlines(viewId, true);
         }
     }
+
+    // The document has a password to modify and this view has not entered it yet.
+    if (_hasPasswordToModify && !session->isDocPasswordToModifyEntered())
+        _loKitDocument->setViewReadOnly(viewId, true);
 
     // viewId's monotonically increase, and CallbackDescriptors are never freed.
     _viewIdToCallbackDescr.emplace(viewId,
@@ -2994,7 +3040,10 @@ void Document::dumpState(std::ostream& oss)
         << "\n\tjailedUrl: " << anonymizeUrl(_jailedUrl) << "\n\trenderOpts: " << _renderOpts
         << "\n\thaveDocPassword: " << _haveDocPassword // not the pwd itself
         << "\n\tisDocPasswordProtected: " << _isDocPasswordProtected
-        << "\n\tdocPasswordType: " << int(_docPasswordType) << "\n\teditorId: " << _editorId
+        << "\n\tdocPasswordType: " << int(_docPasswordType)
+        << "\n\thasPasswordToModify: " << _hasPasswordToModify
+        << "\n\thaveDocPasswordToModify: " << _haveDocPasswordToModify // not the pwd itself
+        << "\n\teditorId: " << _editorId
         << "\n\teditorChangeWarning: " << _editorChangeWarning
         << "\n\tmobileAppDocId: " << _mobileAppDocId
         << "\n\tinputProcessingEnabled: " << processInputEnabled()
@@ -4702,6 +4751,11 @@ void runKitLoopInAThread()
                     ProcUtil::setThreadName("lokit_runloop");
 
                     std::shared_ptr<COKit> loKit(lo_kit);
+
+                    // One process-shared clipboard for every open document; the provider does
+                    // the raw system-pasteboard input and output.
+                    install_clipboard_provider(*loKit);
+
                     int dummy;
                     loKit->runLoop(pollCallback, wakeCallback, &dummy);
 

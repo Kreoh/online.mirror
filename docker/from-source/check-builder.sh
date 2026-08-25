@@ -132,4 +132,4 @@ case "$npm_version" in
   *) echo "npm 9 or newer is required, found $npm_version" >&2; exit 1 ;;
 esac
 
-echo "Collabora source builder preflight passed."
+echo "Online Office source builder preflight passed."

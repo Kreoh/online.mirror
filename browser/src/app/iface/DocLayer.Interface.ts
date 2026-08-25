@@ -32,8 +32,6 @@ interface PainterInterface {
 	};
 }
 
-type MapUpdaterType = (newMapCenter: InternPointLike) => void;
-
 interface DocLayerInterface {
 	_toolbarCommandValues: any;
 
@@ -123,28 +121,18 @@ interface DocLayerInterface {
 		maxZoom?: number,
 		recalcFirstFit?: boolean,
 	): void;
-	_updateMaxBounds(sizeChanged?: boolean, allPages?: boolean): void;
+	_updateScrollLimits(allPages?: boolean): void;
 	_corePixelsToTwips(corePixels: { x: number; y: number }): cool.Point;
 	// Is this still in user?
 	_ySplitter: any;
 	_xSplitter: any;
 	_cursorMarker?: Cursor;
-	_syncTileContainerSize(force?: boolean): boolean;
+	_syncTileContainerSize(): void;
 	_postSelectTextEvent(type: string, x: number, y: number): void;
 	_viewId: number;
 	_openCommentWizard(annotation?: cool.Comment): void;
 	_parseCellRange(cellRange: string): cool.Bounds;
 	_cellRangeToTwipRect(cellRange: cool.Bounds): cool.Bounds;
-	preZoomAnimation(pinchStartCenter: InternPointLike): void;
-	zoomStep(zoom: number, newCenter: InternPointLike): void;
-	zoomStepEnd(
-		zoom: number,
-		newCenter: InternPointLike,
-		mapUpdater: MapUpdaterType,
-		runAtFinish: () => void,
-		noGap?: boolean,
-	): void;
-	postZoomAnimation(): void;
 	_checkSelectedPart(): void;
 	requestNewFiledBasedViewTiles(): void;
 	_docPixelSize: cool.PointLike;

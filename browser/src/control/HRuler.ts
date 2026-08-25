@@ -80,7 +80,10 @@ class HRuler extends Ruler {
 		this._map.on('scrolllimits', this._updatePaintTimer, this);
 		this._map.on('moveend fixruleroffset', this.fixOffset, this);
 		this._map.on('updatepermission', this._changeInteractions, this);
-		window.L.DomUtil.addClass(this._map.getContainer(), 'hasruler');
+		window.L.DomUtil.addClass(
+			document.getElementById('document-container'),
+			'hasruler',
+		);
 
 		const container: HTMLDivElement = this._initLayout();
 		const corner: HTMLElement =
@@ -668,7 +671,7 @@ class HRuler extends Ruler {
 		const leftPageMargin = this.options.leftOffset;
 		const rightPageMargin =
 			this.options.pageWidth - (this.options.leftOffset + this.options.margin2);
-		const scale = app.map.getZoomScale(this._map.getZoom(), 10);
+		const scale = app.activeDocument.getZoomScale(this._map.getZoom(), 10);
 		const rulerWidth =
 			app.activeDocument.fileSize.cX - this.options.tileMargin * 2 * scale;
 		const rulerWidthCM = Math.floor(
@@ -839,7 +842,7 @@ class HRuler extends Ruler {
 		rMargin =
 			this.options.pageWidth - (this.options.leftOffset + this.options.margin2);
 
-		scale = this._map.getZoomScale(this._map.getZoom(), 10);
+		scale = app.activeDocument.getZoomScale(this._map.getZoom(), 10);
 		wPixel =
 			this._map._docLayer._docPixelSize.x - this.options.tileMargin * 2 * scale;
 

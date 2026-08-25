@@ -261,11 +261,6 @@ class CanvasOverlay extends CanvasSectionObject {
 	}
 
 	private draw(paintArea?: cool.Bounds) {
-		if (this.tsManager && this.tsManager.waitForTiles()) {
-			// don't paint anything till tiles arrive for new zoom.
-			return;
-		}
-
 		var orderedPaths = Array<CPath>();
 		this.paths.forEach((path: CPath) => {
 			orderedPaths.push(path);
@@ -281,11 +276,6 @@ class CanvasOverlay extends CanvasSectionObject {
 	}
 
 	private redraw(path: CPath, oldBounds: cool.Bounds) {
-		if (this.tsManager && this.tsManager.waitForTiles()) {
-			// don't paint anything till tiles arrive for new zoom.
-			return;
-		}
-
 		if (!this.isPathVisible(path) && (!oldBounds.isValid() || !this.intersectsVisible(oldBounds)))
 			return;
 		// This does not get called via onDraw(ie, tiles aren't painted), so ask tileSection to "erase" by painting over.
@@ -297,8 +287,7 @@ class CanvasOverlay extends CanvasSectionObject {
 	}
 
 	private updateCanvasBounds() {
-		var viewBounds: any = this.map.getPixelBoundsCore();
-		this.bounds = new cool.Bounds(new cool.Point(viewBounds.min.x, viewBounds.min.y), new cool.Point(viewBounds.max.x, viewBounds.max.y));
+		this.bounds = app.activeDocument.activeLayout.getViewportCorePixelBounds();
 	}
 
 	getBounds(): cool.Bounds {
@@ -324,7 +313,7 @@ class CanvasOverlay extends CanvasSectionObject {
 			// at the current frame's zoom level.
 
 			var splitPos = this.tsManager.getSplitPos();
-			var scale = this.tsManager._zoomFrameScale;
+			var scale = this.tsManager.zoomFrameScale();
 
 			const docPos = this.tsManager._getZoomDocPos(
 				this.tsManager._newCenter,
@@ -364,7 +353,7 @@ class CanvasOverlay extends CanvasSectionObject {
 
 		} else if (this.tsManager._inZoomAnim && fixed) {
 
-			var scale = this.tsManager._zoomFrameScale;
+			var scale = this.tsManager.zoomFrameScale();
 			transform.scale(scale, scale);
 
 			if (clipArea) {

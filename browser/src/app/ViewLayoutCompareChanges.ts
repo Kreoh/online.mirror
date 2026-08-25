@@ -14,7 +14,7 @@ enum TileMode {
 	RightSide = 2,
 }
 
-class ViewLayoutCompareChanges extends ViewLayoutNewBase {
+class ViewLayoutCompareChanges extends ViewLayoutBase {
 	public readonly type: string = 'ViewLayoutCompareChanges';
 
 	/// Last tile mode seen when converting from canvas to document coordinates.
@@ -27,8 +27,7 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 	constructor() {
 		super();
 
-		app.events.on('resize', this.onResize.bind(this));
-		app.map.on('zoomend', this.onZoomEnd.bind(this));
+		app.map.on('zoomend', this.onZoomEnd, this);
 
 		this.adjustViewZoomLevel();
 
@@ -38,13 +37,19 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 		});
 	}
 
+	public override dispose(): void {
+		app.map.off('zoomend', this.onZoomEnd, this);
+		super.dispose();
+	}
+
 	/// Refresh the view after scroll or zoom change.
 	private refreshView(): void {
 		this.updateViewData();
 		app.sectionContainer.requestReDraw();
 	}
 
-	private onResize(): void {
+	public override onResize(): void {
+		super.onResize();
 		// Defer so that the document anchor section picks up its new size
 		// first.
 		app.layoutingService.appendLayoutingTask(() => {
@@ -78,12 +83,12 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 		);
 
 		const ratio = targetPageWidth / app.activeDocument.fileSize.pX;
-		let zoom = app.map.getScaleZoom(ratio);
+		let zoom = app.activeDocument.getScaleZoom(ratio);
 		zoom = Math.min(max, Math.max(min, zoom));
 
 		if (zoom > 1) zoom = Math.floor(zoom);
 
-		app.map.setZoom(zoom, { animate: false });
+		this.applyZoom(zoom);
 	}
 
 	protected override refreshCurrentCoordList() {
@@ -151,14 +156,23 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 			),
 		]);
 
+		// Comment-free extent. Comment overflow is applied on top via
+		// ensureViewSizeCoversComments; page positioning (getDeflectionX) reads this
+		// base so a comment-inflated viewSize does not shift the pages.
+		this._baseViewSize = this._viewSize.clone();
+
 		this.commitVisibleAreaAndRequestTiles();
+	}
+
+	protected override getBaseViewSize(): cool.SimplePoint {
+		return this._baseViewSize;
 	}
 
 	private getDeflectionX(mode: TileMode): number {
 		Util.ensureValue(app.activeDocument);
 
 		const canvasWidth = this.getDocumentAnchorSection().size[0];
-		const viewXCenter = Math.max(0, this._viewSize.pX - canvasWidth) * 0.5;
+		const viewXCenter = Math.max(0, this._baseViewSize.pX - canvasWidth) * 0.5;
 
 		if (mode === TileMode.LeftSide)
 			return (
@@ -236,19 +250,5 @@ class ViewLayoutCompareChanges extends ViewLayoutNewBase {
 		// Compute the actual right-side space and double it, because
 		// CommentSection.calculateAvailableSpace() halves the result.
 		return (anchorWidth - rightPageRightEdge) * 2;
-	}
-
-	public override scroll(
-		pX: number,
-		pY: number,
-		userIsScrolling: boolean = false,
-	): boolean {
-		const scrolled = super.scroll(pX, pY, userIsScrolling);
-
-		if (scrolled) {
-			this.refreshView();
-		}
-
-		return scrolled;
 	}
 }

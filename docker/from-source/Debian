@@ -4,15 +4,15 @@
 
 FROM debian:stable@sha256:a317324860a60f88f98be05d1cab92f2262ef03884d1a6d7894894732ac9eb42
 
-ARG COLLABORA_SOURCE_REVISION
+ARG ONLINE_OFFICE_SOURCE_REVISION
 
 # get the latest fixes
 # install engine run-time dependencies
 # install adduser, findutils, openssl and cpio that we need later
 # install an editor
-# tdf#117557 - Add CJK Fonts to Collabora Online Docker Image
-RUN test "${#COLLABORA_SOURCE_REVISION}" -eq 40 && \
-    case "$COLLABORA_SOURCE_REVISION" in *[!0-9a-f]*) exit 1 ;; esac && \
+# tdf#117557 - Add CJK fonts to the Online Office Docker image
+RUN test "${#ONLINE_OFFICE_SOURCE_REVISION}" -eq 40 && \
+    case "$ONLINE_OFFICE_SOURCE_REVISION" in *[!0-9a-f]*) exit 1 ;; esac && \
     apt-get update && \
     apt-get -y install libpng16-16 fontconfig adduser cpio \
                findutils nano libcap2-bin openssl \
@@ -21,10 +21,10 @@ RUN test "${#COLLABORA_SOURCE_REVISION}" -eq 40 && \
                ca-certificates
 
 
-# copy freshly built engine and Collabora Online
+# copy the freshly built engine and Online Office
 COPY /instdir /
 
-# set up Collabora Online (normally done by postinstall script of package)
+# set up Online Office (normally done by the package post-install script)
 # Fix permissions
 RUN setcap cap_fowner,cap_chown,cap_sys_chroot=ep /usr/bin/coolforkit-caps && \
     setcap cap_sys_admin=ep /usr/bin/coolmount && \
@@ -41,7 +41,9 @@ RUN setcap cap_fowner,cap_chown,cap_sys_chroot=ep /usr/bin/coolforkit-caps && \
     chmod g+w /etc/passwd
 
 LABEL org.opencontainers.image.source="https://github.com/Kreoh/online.mirror" \
-      org.opencontainers.image.revision="$COLLABORA_SOURCE_REVISION"
+      org.opencontainers.image.revision="$ONLINE_OFFICE_SOURCE_REVISION" \
+      org.opencontainers.image.title="Online Office" \
+      org.opencontainers.image.description="Source-built Online Office server"
 
 EXPOSE 9980
 

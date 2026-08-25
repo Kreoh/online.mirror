@@ -289,6 +289,7 @@ const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "ssl.hpkp[@enable]", "false" },
     { "ssl.hpkp[@report_only]", "false" },
     { "ssl.key_file_path", COOLWSD_CONFIGDIR "/key.pem" },
+    { "ssl.min_protocol_version", "TLSv1.2" },
 #if !MOBILEAPP
     { "ssl.ssl_verification", SSL_VERIFY },
 #endif
@@ -322,7 +323,9 @@ const Util::UnorderedStringMap<std::string> DefAppConfig = {
     { "trace_event.path", COOLWSD_TRACEEVENTFILE },
     { "trace_event[@enable]", "false" },
 #endif
+    { "user_interface.default_zoom", "" },
     { "user_interface.mode", "default" },
+    { "user_interface.smart_zoom", "" },
     { "user_interface.statusbar_save_indicator", "true" },
     { "user_interface.use_integration_theme", "true" },
     { "user_interface.brandProductName", "" },

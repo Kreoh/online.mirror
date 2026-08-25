@@ -267,13 +267,13 @@ class Dispatcher {
 		};
 
 		this.actionsMap['zoomin'] = () => {
-			app.map.zoomIn(1, null, true /* animate? */);
+			app.zoomControl.zoomTo(app.map.getZoom() + 1, undefined, true);
 		};
 		this.actionsMap['zoomout'] = () => {
-			app.map.zoomOut(1, null, true /* animate? */);
+			app.zoomControl.zoomTo(app.map.getZoom() - 1, undefined, true);
 		};
 		this.actionsMap['zoomreset'] = () => {
-			app.map.setZoom(app.map.options.zoom, null, true);
+			app.zoomControl.zoomTo(app.map.options.zoom, undefined, true);
 		};
 		this.actionsMap['fitwidthzoom'] = () => {
 			if (app.activeDocument.activeLayout)
@@ -281,9 +281,7 @@ class Dispatcher {
 		};
 
 		this.actionsMap['zoomSettings'] = () => {
-			(app.map as any).settings.showSettingsDialog(
-				'common-smartZoom-container',
-			);
+			(app.map as any).settings.showSettingsDialog('zoom-behaviour');
 		};
 
 		this.actionsMap['searchprev'] = () => {
@@ -1052,7 +1050,7 @@ class Dispatcher {
 					// size. Seed it from the document size.
 					app.activeDocument.activeLayout.viewSize =
 						app.activeDocument.fileSize.clone();
-					app.map._docLayer._updateMaxBounds(true);
+					app.map._docLayer._updateScrollLimits();
 					app.activeDocument.activeLayout.adjustViewZoomLevel();
 				} else {
 					app.activeDocument.activeLayout = new ViewLayoutMultiPage();
@@ -1351,6 +1349,27 @@ class Dispatcher {
 			const id = action.substring('extension-toggle-'.length);
 			const ext = app.map._extensions && app.map._extensions[id];
 			if (ext) ext.toggle();
+			return;
+		}
+
+		if (action.startsWith('ext:')) {
+			// Split on the first remaining colon only, so a commandId that itself
+			// contains a colon doesn't get truncated the way action.split(':') would:
+			const rest = action.slice('ext:'.length);
+			const sep = rest.indexOf(':');
+			const extId = sep < 0 ? rest : rest.slice(0, sep);
+			const commandId = sep < 0 ? '' : rest.slice(sep + 1);
+			const ext = app.map._extensions && app.map._extensions[extId];
+			if (!ext) {
+				console.warn(
+					'extension ' +
+						extId +
+						': not found; cannot dispatch command ' +
+						commandId,
+				);
+				return;
+			}
+			ext.invokeCommand(commandId);
 			return;
 		}
 

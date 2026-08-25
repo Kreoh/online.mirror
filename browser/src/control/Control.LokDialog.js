@@ -302,7 +302,7 @@ window.L.Control.LokDialog = window.L.Control.extend({
 		}
 
 		if (e.title && typeof brandProductName !== 'undefined') {
-			e.title = e.title.replace('Collabora Office', brandProductName);
+			e.title = e.title.replace('Online Office', brandProductName);
 		}
 
 		if (e.action === 'created') {
@@ -638,18 +638,18 @@ window.L.Control.LokDialog = window.L.Control.extend({
 			// magic to re-calculate the position in twips to absolute pixel
 			// position inside the #document-container
 			var pixels = this._map._docLayer._twipsToPixels(new cool.Point(leftTwips, topTwips));
-			var origin = this._map.getPixelOrigin();
-			var panePos = this._map._getMapPanePos();
 
-			var left = pixels.x + panePos.x - origin.x;
-			var top = pixels.y + panePos.y - origin.y;
+			// The viewed rectangle's top-left (in CSS pixels) is the scroll and
+			// centring offset, kept current for every layout.
+			var viewed = app.activeDocument.activeLayout.viewedRectangle;
+			var left = pixels.x - viewed.cX1;
+			var top = pixels.y - viewed.cY1;
 
 			if (left >= 0 && top >= 0) {
 				$(dialogContainer).dialog('option', 'position',
 							  { my: 'left top',
 							    at: 'left+' + left + ' top+' + top,
-							    of: type === 'dropdown' ? '#map' :
-							    '#document-container' });
+							    of: '#document-container' });
 			}
 		}
 

@@ -20,7 +20,7 @@
          <input id="ui_defaults" name="ui_defaults" type="hidden"/>
          <input id="wopi_setting_base_url" name="wopi_setting_base_url" type="hidden"/>
     </form>
-    <iframe id="coolframe" name= "coolframe" style="width:100%;height:100%;position:absolute;" title="Collabora Online" allow="fullscreen">
+    <iframe id="coolframe" name= "coolframe" style="width:100%;height:100%;position:absolute;" title="Online Office" allow="fullscreen">
     </iframe>
     <script>
         function constructWopiUrl() {
@@ -61,7 +61,7 @@
             // Initial title carries the brand without a module suffix; the
             // iframe will postMessage 'Doc_Title' once it knows the doc type
             // and we refine to '<filename> - Collabora <Module>' then.
-            var initialTitle = filename + " - Collabora Online";
+            var initialTitle = filename + " - Online Office";
             window.document.title = initialTitle;
             document.getElementById("coolframe").title = initialTitle;
             if (req)

@@ -101,7 +101,7 @@ export class Header extends CanvasSectionObject {
 
 	_getFontSize(): number {
 		const map = this._map;
-		const zoomScale = map.getZoomScale(map.getZoom(), map.options.defaultZoom);
+		const zoomScale = app.activeDocument.getZoomScale(map.getZoom(), map.options.defaultZoom);
 		if (zoomScale < 0.68)
 			return Math.round(8 * app.dpiScale);
 		else if (zoomScale < 0.8)
@@ -429,7 +429,8 @@ export class Header extends CanvasSectionObject {
 	}
 
 	_updateColumnHeader(): void {
-		this._map._docLayer.refreshViewData({x: this._map._getTopLeftPoint().x, y: 0, offset: {x: undefined, y: 0}});
+		Util.ensureValue(app.activeDocument);
+		this._map._docLayer.refreshViewData({x: app.activeDocument.activeLayout.viewedRectangle.cX1, y: 0, offset: {x: undefined, y: 0}});
 	}
 
 	_colIndexToAlpha (columnNumber: number): string {
@@ -885,7 +886,7 @@ export class HeaderInfo {
 			const viewBounds = ctx.viewBounds;
 			const freePaneBounds = new cool.Bounds(viewBounds.min.add(ctx.splitPos), viewBounds.max);
 
-			scale = tsManager._zoomFrameScale;
+			scale = tsManager.zoomFrameScale();
 
 			const zoomPos = tsManager._getZoomDocPos(
 				tsManager._newCenter,

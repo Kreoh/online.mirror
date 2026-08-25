@@ -529,8 +529,10 @@ class BitmapTileManager extends RenderManagerBase {
 			updated = true;
 		}
 
-		const center = app.map.getCenter();
-		const pixelBounds = app.map.getPixelBoundsCore(center, this._zoom);
+		// The layout scrolls itself, not the leaflet map, so read the layout
+		// viewport (core pixels) directly for prefetch and split-pane borders.
+		const pixelBounds =
+			app.activeDocument.activeLayout.getViewportCorePixelBounds();
 		if (!this._pixelBounds || !pixelBounds.equals(this._pixelBounds)) {
 			this._pixelBounds = pixelBounds;
 			updated = true;
@@ -1830,12 +1832,16 @@ class BitmapTileManager extends RenderManagerBase {
 	public predictTilesToSlurp() {
 		if (!this.checkPointers()) return 0;
 
-		var size = app.map.getSize();
+		Util.ensureValue(app.activeDocument);
 
-		if (size.x === 0 || size.y === 0) return 0;
+		var size = app.activeDocument.activeLayout.frameSize;
+
+		if (size.cX === 0 || size.cY === 0) return 0;
 
 		var zoom = Math.round(app.map.getZoom());
-		var pixelBounds = app.map.getPixelBoundsCore(app.map.getCenter(), zoom);
+
+		var pixelBounds =
+			app.activeDocument.activeLayout.getViewportCorePixelBounds();
 
 		var queue = this.getMissingTiles(pixelBounds, zoom);
 
@@ -1881,7 +1887,7 @@ class BitmapTileManager extends RenderManagerBase {
 		return this;
 	}
 
-	public update(center: any = null, zoom: number = null) {
+	public update(zoom: number = null) {
 		const map: any = app.map;
 
 		if (
@@ -1897,8 +1903,8 @@ class BitmapTileManager extends RenderManagerBase {
 			return;
 
 		// be sure canvas is initialized already and has the correct size.
-		const size: any = map.getSize();
-		if (size.x === 0 || size.y === 0) {
+		const size: any = app.activeDocument.activeLayout.frameSize;
+		if (size.cX === 0 || size.cY === 0) {
 			setTimeout(
 				function () {
 					this.update();
@@ -1923,15 +1929,25 @@ class BitmapTileManager extends RenderManagerBase {
 			return;
 		} else if (app.activeDocument.activeLayout.type === 'ViewLayoutMultiPage')
 			return;
-
-		if (!center) {
-			center = map.getCenter();
+		else if (app.activeDocument.activeLayout.type === 'ViewLayoutCalc') {
+			// Calc runs its own richer tile refresh (client zoom + visible area +
+			// coord list) rather than the generic getMissingTiles path below. This
+			// is reached both on scroll and on invalidation-triggered refetches
+			// (_requestNewTiles -> update).
+			app.map._docLayer._sendClientZoom();
+			const layout = app.activeDocument.activeLayout as ViewLayoutCalc;
+			layout.sendClientVisibleArea();
+			layout.refreshTiles();
+			this.initPreFetchAdjacentTiles();
+			return;
 		}
+
 		if (!zoom) {
 			zoom = Math.round(map.getZoom());
 		}
 
-		var pixelBounds = map.getPixelBoundsCore(center, zoom);
+		var pixelBounds =
+			app.activeDocument.activeLayout.getViewportCorePixelBounds();
 		var queue = this.getMissingTiles(pixelBounds, zoom, true);
 
 		app.map._docLayer._sendClientZoom();
@@ -2077,10 +2093,17 @@ class BitmapTileManager extends RenderManagerBase {
 		if (!this.checkPointers() || app.map._docLayer._documentInfo === '') {
 			return;
 		}
-		var center = app.map.getCenter();
+
+		// Let the layout request the tiles covering its viewed rectangle.
+		if (app.activeDocument.activeLayout.type === 'ViewLayoutCalc') {
+			(app.activeDocument.activeLayout as ViewLayoutCalc).refreshTiles();
+			return;
+		}
+
 		var zoom = Math.round(app.map.getZoom());
 
-		var pixelBounds = app.map.getPixelBoundsCore(center, zoom);
+		var pixelBounds =
+			app.activeDocument.activeLayout.getViewportCorePixelBounds();
 
 		// create a queue of coordinates to load tiles from
 		const queue = this.getMissingTiles(pixelBounds, zoom, true);
@@ -2146,6 +2169,20 @@ class BitmapTileManager extends RenderManagerBase {
 		return tileCombineQueue;
 	}
 
+	// Refresh distances for the current view, then request the visible tiles.
+	// Refreshing distances first is essential: it clears distanceFromView on
+	// tiles that scrolled out of view. checkRequestTiles() calls
+	// makeTileCurrent() which can pause drawing for coherency; drawing resumes
+	// once visibleTilesReady() is satisfied, and that predicate scans every tile
+	// with distanceFromView === 0. The refresh keeps that scan to the tiles that
+	// are really in view, so drawing resumes as soon as they arrive.
+	public requestVisibleTiles(currentCoordList: TileCoordData[]): void {
+		this.updateAllTileDistances();
+		this.beginTransaction();
+		this.checkRequestTiles(currentCoordList);
+		this.endTransaction(null);
+	}
+
 	public updateFileBasedView(
 		checkOnly: boolean = false,
 		zoomFrameBounds: any = null,
@@ -2177,7 +2214,8 @@ class BitmapTileManager extends RenderManagerBase {
 
 		var zoom = forZoom || Math.round(app.map.getZoom());
 		var currZoom = Math.round(app.map.getZoom());
-		var relScale = currZoom == zoom ? 1 : app.map.getZoomScale(zoom, currZoom);
+		var relScale =
+			currZoom == zoom ? 1 : app.activeDocument.getZoomScale(zoom, currZoom);
 
 		var ratio = (this.tileSize * relScale) / app.tile.size.y;
 		var mode = 0; // mode is different only in Impress MasterPage mode so far

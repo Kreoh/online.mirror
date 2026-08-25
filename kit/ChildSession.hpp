@@ -91,6 +91,9 @@ public:
     int getSpeed();
     bool isDocLoaded() const { return _isDocLoaded; }
 
+    /// Whether this view has entered the correct password to modify the document.
+    bool isDocPasswordToModifyEntered() const { return _isDocPasswordToModifyEntered; }
+
     void loKitCallback(COKitCallbackType type, const std::string& payload);
 
     /// Initializes the watermark support, if enabled and required.
@@ -197,6 +200,7 @@ private:
     bool completeFunction(const StringVector& tokens);
     bool unoCommand(const StringVector& tokens);
     bool unoSignatureCommand(std::string_view commandName);
+    bool editWithPassword(const StringVector& tokens);
     bool selectText(const StringVector& tokens, LokEventTargetEnum target);
     bool selectGraphic(const StringVector& tokens);
     bool renderNextSlideLayer(SlideCompressor& scomp, unsigned width, unsigned height,
@@ -287,6 +291,7 @@ public:
             << "\n\tcursor: " << _cursorPosition.toString()
             << "\n\tcanonicalViewId: " << _canonicalViewId
             << "\n\tisDocLoaded: " << _isDocLoaded
+            << "\n\tisDocPasswordToModifyEntered: " << _isDocPasswordToModifyEntered
             << "\n\tdocType: " << _docType
             << "\n\tcopyingToClipboard: " << _copyToClipboard
             << "\n\tdocType: " << _docType
@@ -325,6 +330,9 @@ private:
 
     /// Whether document has been opened successfully
     bool _isDocLoaded;
+
+    /// Whether this view has entered the correct password to modify the document
+    bool _isDocPasswordToModifyEntered;
 
     std::string _docType;
 

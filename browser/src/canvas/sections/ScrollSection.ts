@@ -209,28 +209,29 @@ export class ScrollSection extends CanvasSectionObject {
 		var vx = 0;
 		var vy = 0;
 
-		if (e.pos.y > e.map._size.y - 50) {
+		// Every layout is off-map now, so the top-left comes from the viewed
+		// rectangle (the leaflet map pane is stale/unused).
+		const topLeftX = app.activeDocument.activeLayout.viewedRectangle.cX1;
+		const topLeftY = app.activeDocument.activeLayout.viewedRectangle.cY1;
+
+		// The document area (anchor/tiles section) the map used to represent.
+		const frame = app.activeDocument.activeLayout.frameSize;
+
+		if (e.pos.y > frame.cY - 50) {
 			vy = 50;
-		} else if (e.pos.y < 50 && e.map._getTopLeftPoint().y > 50) {
+		} else if (e.pos.y < 50 && topLeftY > 50) {
 			vy = -50;
 		}
 
-		const mousePosX: number = this.isRTL() ? e.map._size.x - e.pos.x : e.pos.x;
-		const mapLeft: number = this.isRTL() ? e.map._size.x - e.map._getTopLeftPoint().x : e.map._getTopLeftPoint().x;
-		if (mousePosX > e.map._size.x - 50) {
+		const mousePosX: number = this.isRTL() ? frame.cX - e.pos.x : e.pos.x;
+		const mapLeft: number = this.isRTL() ? frame.cX - topLeftX : topLeftX;
+		if (mousePosX > frame.cX - 50) {
 			vx = 50;
 		} else if (mousePosX < 50 && mapLeft > 50) {
 			vx = -50;
 		}
 
 		this.onScrollVelocity({ vx: vx, vy: vy, pos: e.pos });
-	}
-
-	public onUpdateScrollOffset (): void {
-		if (this.map._docLayer._docType === 'spreadsheet') {
-			this.map._docLayer.refreshViewData();
-			this.map._docLayer._restrictDocumentSize();
-		}
 	}
 
 	private DrawVerticalScrollBarMobile(): void {
@@ -379,24 +380,8 @@ export class ScrollSection extends CanvasSectionObject {
 		}
 	}
 
-	private doMove() {
-		const scrollProps: ScrollProperties = (app.activeDocument as DocumentBase).activeLayout.scrollProperties;
-
-		this.map.panBy(new cool.Point(scrollProps.moveBy[0] / app.dpiScale, scrollProps.moveBy[1] / app.dpiScale));
-		scrollProps.moveBy = null;
-		this.onUpdateScrollOffset();
-
-		if (app && app.file.fileBasedView === true)
-			app.map._docLayer._checkSelectedPart();
-
-		app.activeDocument.activeLayout.refreshScrollProperties();
-	}
-
 	public onDraw(frameCount: number, elapsedTime: number): void {
-		if (app.activeDocument.activeLayout.scrollProperties.moveBy !== null)
-			this.doMove();
-		else
-			app.activeDocument.activeLayout.refreshScrollProperties();
+		app.activeDocument.activeLayout.refreshScrollProperties();
 
 		if (this.isAnimating && frameCount >= 0)
 			this.calculateCurrentAlpha(elapsedTime);
@@ -871,7 +856,9 @@ export class ScrollSection extends CanvasSectionObject {
 			e.preventDefault();
 			e.stopImmediatePropagation();
 			this.stopPropagating();
-			app.map.scrollHandler._onWheelScroll(e);
+			// ZoomControl is itself a window section and receives this same wheel
+			// event from the container, so it handles the ctrl+wheel zoom. Nothing
+			// more to do here.
 			return;
 		}
 

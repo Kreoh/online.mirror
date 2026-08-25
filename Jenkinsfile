@@ -6,7 +6,7 @@ pipeline {
         }
     }
     environment {
-        IMAGE_BASE_NAME = 'ghcr.io/kreoh/collabora-online'
+        IMAGE_BASE_NAME = 'ghcr.io/kreoh/online-office'
         SOURCE_BRANCH = 'kreoh-main-agent-port'
         SOURCE_VERSION = '26.04.4.0-agent-save'
     }
@@ -14,7 +14,7 @@ pipeline {
         skipDefaultCheckout(true)
         disableConcurrentBuilds()
         timeout(time: 12, unit: 'HOURS')
-        lock(resource: "collabora-online-build-${env.BRANCH_NAME}", inversePrecedence: true)
+        lock(resource: "online-office-build-${env.BRANCH_NAME}", inversePrecedence: true)
     }
     stages {
         stage('Set Build Variables') {
@@ -47,10 +47,10 @@ pipeline {
                             refspec: "+refs/heads/${env.SOURCE_BRANCH}:refs/remotes/origin/${env.SOURCE_BRANCH}"
                         ]]
                     ])
-                    env.COLLABORA_SOURCE_REVISION =
+                    env.ONLINE_OFFICE_SOURCE_REVISION =
                         scmVars.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-                    env.IMAGE_TAG = "${env.SOURCE_VERSION}-${env.COLLABORA_SOURCE_REVISION.take(12)}"
-                    echo "Checked out ${env.COLLABORA_SOURCE_REVISION}; image tag is ${env.IMAGE_TAG}"
+                    env.IMAGE_TAG = "${env.SOURCE_VERSION}-${env.ONLINE_OFFICE_SOURCE_REVISION.take(12)}"
+                    echo "Checked out ${env.ONLINE_OFFICE_SOURCE_REVISION}; image tag is ${env.IMAGE_TAG}"
                 }
             }
         }
@@ -63,11 +63,11 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    case "$COLLABORA_SOURCE_REVISION" in
+                    case "$ONLINE_OFFICE_SOURCE_REVISION" in
                         [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-                        *) echo "COLLABORA_SOURCE_REVISION must be a full lower-case Git revision." >&2; exit 1 ;;
+                        *) echo "ONLINE_OFFICE_SOURCE_REVISION must be a full lower-case Git revision." >&2; exit 1 ;;
                     esac
-                    test "$(git rev-parse HEAD)" = "$COLLABORA_SOURCE_REVISION"
+                    test "$(git rev-parse HEAD)" = "$ONLINE_OFFICE_SOURCE_REVISION"
                     test "$(awk -F'[][]' '$2 == "coolwsd" { print $4; exit }' configure.ac)" = '26.04.4.0'
                     test "$(grep -Fxc -- '--without-branding' engine/distro-configs/OnlineLinuxCommon.conf)" -eq 1
                     ! grep -Eq -- '--with-branding|--with-vendor' \
@@ -84,6 +84,7 @@ pipeline {
                     grep -Fq -- '--with-info-url=about:blank' docker/from-source/build.sh
                     test ! -e browser/images/collabora-office-white.svg
                     grep -Fq 'background-image: none;' browser/css/backstage.css
+                    bash docker/from-source/test-debranding.sh
                 '''
             }
         }
@@ -106,7 +107,7 @@ pipeline {
                     docker_socket=/var/run/docker.sock
                     docker_gid="$(stat -c '%g' "$docker_socket")"
                     workspace_parent="$(dirname "$PWD")"
-                    cache_root="${COLLABORA_SOURCE_CACHE_ROOT:-$workspace_parent/.collabora-source-cache}"
+                    cache_root="${ONLINE_OFFICE_SOURCE_CACHE_ROOT:-$workspace_parent/.online-office-source-cache}"
                     cache_branch="$(printf '%s' "$SOURCE_BRANCH" | tr -c 'A-Za-z0-9_.-' '_')"
                     source_cache_host="$cache_root/$cache_branch"
                     mkdir -p "$source_cache_host"/build "$source_cache_host"/ccache "$source_cache_host"/home
@@ -119,9 +120,9 @@ pipeline {
                         -w /workspace \
                         -e DOCKER_HUB_REPO="$IMAGE_BASE_NAME" \
                         -e DOCKER_HUB_TAG="$IMAGE_TAG" \
-                        -e COLLABORA_SOURCE_REVISION="$COLLABORA_SOURCE_REVISION" \
-                        -e COLLABORA_SOURCE_BUILD_HOST_OS=Debian \
-                        -e COLLABORA_SOURCE_CACHE_DIR=/workspace-cache/build \
+                        -e ONLINE_OFFICE_SOURCE_REVISION="$ONLINE_OFFICE_SOURCE_REVISION" \
+                        -e ONLINE_OFFICE_SOURCE_BUILD_HOST_OS=Debian \
+                        -e ONLINE_OFFICE_SOURCE_CACHE_DIR=/workspace-cache/build \
                         -e CCACHE_DIR=/workspace-cache/ccache \
                         -e HOME=/workspace-cache/home \
                         "$builder_tag" \
@@ -135,9 +136,9 @@ pipeline {
                         -w /workspace \
                         -e DOCKER_HUB_REPO="$IMAGE_BASE_NAME" \
                         -e DOCKER_HUB_TAG="$IMAGE_TAG" \
-                        -e COLLABORA_SOURCE_REVISION="$COLLABORA_SOURCE_REVISION" \
-                        -e COLLABORA_SOURCE_BUILD_HOST_OS=Debian \
-                        -e COLLABORA_SOURCE_CACHE_DIR=/workspace-cache/build \
+                        -e ONLINE_OFFICE_SOURCE_REVISION="$ONLINE_OFFICE_SOURCE_REVISION" \
+                        -e ONLINE_OFFICE_SOURCE_BUILD_HOST_OS=Debian \
+                        -e ONLINE_OFFICE_SOURCE_CACHE_DIR=/workspace-cache/build \
                         -e CCACHE_DIR=/workspace-cache/ccache \
                         -e HOME=/workspace-cache/home \
                         "$builder_tag" \
@@ -147,7 +148,8 @@ pipeline {
                             --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
                             "$IMAGE_BASE_NAME:$IMAGE_TAG"
                     )
-                    test "$revision" = "$COLLABORA_SOURCE_REVISION"
+                    test "$revision" = "$ONLINE_OFFICE_SOURCE_REVISION"
+                    python3 docker/from-source/debrand.py scan-image "$IMAGE_BASE_NAME:$IMAGE_TAG"
                     docker run --rm --entrypoint /bin/sh "$IMAGE_BASE_NAME:$IMAGE_TAG" -ec \
                         'test ! -e /usr/share/coolwsd/browser/dist/images/collabora-office-white.svg'
                 '''

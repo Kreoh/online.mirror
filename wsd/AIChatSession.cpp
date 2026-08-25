@@ -111,7 +111,7 @@ bool isInsufficientQuotaError(const std::string& body)
 }
 
 const std::string AI_SYSTEM_PROMPT =
-    "You are a helpful assistant for Collabora Online. "
+    "You are a helpful assistant for Online Office. "
     "Help users with their documents - answering questions, suggesting edits, "
     "rewriting text, and more. When the user shares selected text from their document, "
     "provide relevant help with that text. When no selected text is provided, answer "
@@ -484,7 +484,8 @@ Poco::JSON::Array::Ptr AIChatSession::buildToolDefinitions(const std::string& do
     tools->add(makeAITool(
         std::string(AIToolNames::ListCalcFunctions),
         "List all available spreadsheet functions in the current Calc document, "
-        "grouped by category. Returns function names and signatures. "
+        "grouped by category. Returns US English function names and signatures, "
+        "whatever the user's language is. "
         "Call this when you need to verify a function exists or discover "
         "the right function for a task. Only works for Calc/spreadsheet documents.",
         makeParamSchema({}, {})));
@@ -837,6 +838,9 @@ void AIChatSession::launchChatRequest(const PendingChatRequest& req, const Desig
             " separators (e.g., =VLOOKUP(A1,B:C,2,FALSE) not =VLOOKUP(A1;B:C;2;FALSE))."
             " Use standard Excel/Calc function names: SUM, AVERAGE, VLOOKUP, IF, COUNTIF,"
             " SUMIF, INDEX, MATCH, etc."
+            " Keep the function names in English even when you are writing to the user in"
+            " another language, and never translate them yourself. The spreadsheet stores"
+            " the formula and shows it back in the user's own language on its own."
             " If you are unsure whether a function exists, call list_calc_functions to check."
             " If the user has selected spreadsheet data, use the cell addresses visible in that "
             "data"
@@ -1075,8 +1079,8 @@ void AIChatSession::callLLMAPI()
     // Shared completion handler, invoked on the document broker's polling thread.
     // statusCode is an HTTP code or an ai::Http* sentinel; body is the response
     // body (empty when there was no response); reason is the HTTP reason phrase.
-    auto onResponse = [clientSessionPtr, self](int statusCode, const std::string& body,
-                                               const std::string& reason)
+    auto onResponse = [clientSessionPtr = std::move(clientSessionPtr), self](
+        int statusCode, const std::string& body, const std::string& reason)
     {
         self->_activeChatSession.reset();
 
@@ -1168,7 +1172,7 @@ void AIChatSession::postChatCompletion(
                    r->statusLine().reasonPhrase());
     });
     httpSession->setConnectFailHandler(
-        [onResponse](const std::shared_ptr<http::Session>& /*session*/)
+        [onResponse = std::move(onResponse)](const std::shared_ptr<http::Session>& /*session*/)
     {
         onResponse(ai::HttpConnectFailed, std::string(), std::string());
     });
@@ -1176,7 +1180,7 @@ void AIChatSession::postChatCompletion(
     http::Request httpRequest(Poco::URI(_toolLoop->requestUrl).getPathAndQuery());
     httpRequest.setVerb(http::Request::VERB_POST);
     httpRequest.set("Content-Type", "application/json");
-    httpRequest.set("Authorization", authHeader);
+    httpRequest.set("Authorization", std::move(authHeader));
     httpRequest.setBody(std::move(payloadStr), "application/json");
 
     _activeChatSession = httpSession;
@@ -1516,7 +1520,7 @@ bool AIChatSession::executeToolCall(const std::string& toolCallId,
             _toolLoop->pendingSummary = "";
         else if (!target.empty())
         {
-            std::string name = target;
+            std::string name = std::move(target);
             if (const auto bar = name.rfind('|'); bar != std::string::npos)
                 name = name.substr(0, bar);
             _toolLoop->pendingSummary =
@@ -1587,7 +1591,7 @@ bool AIChatSession::executeToolCall(const std::string& toolCallId,
 
         sendToolProgress(fnName, "Loading function catalog...");
         docBroker->forwardToChild(_session.client_from_this(),
-            "commandvalues command=.uno:CalcFunctionList");
+            "commandvalues command=.uno:CalcFunctionList?english=true");
         return true;
     }
 
@@ -1711,7 +1715,7 @@ bool AIChatSession::executeToolCall(const std::string& toolCallId,
                     JsonUtil::parseJSON(outlineStr, outlineObj);
             }
             if (!outlineObj && argsObj->has("slides"))
-                outlineObj = argsObj;
+                outlineObj = std::move(argsObj);
         }
 
         if (!outlineObj)
@@ -2211,8 +2215,9 @@ bool AIChatSession::handleApprove(const std::string& firstLine)
 
             sendToolProgress(std::string(AIToolNames::SetCellFormula), "Setting formulas...");
 
-            // Dispatch GoToCell + EnterString for each pair
+            // Dispatch SetCellFormula for each pair
             Poco::JSON::Array resultArr;
+            std::string lastCell;
             for (std::size_t i = 0; i < pairs->size(); ++i)
             {
                 auto p = pairs->getObject(i);
@@ -2224,20 +2229,27 @@ bool AIChatSession::handleApprove(const std::string& firstLine)
                 std::string escapedCell = JsonUtil::escapeJSONValue(cell);
                 std::string escapedFormula = JsonUtil::escapeJSONValue(formula);
 
-                std::string goToArgs = "{\"ToPoint\":{\"type\":\"string\",\"value\":\""
-                    + escapedCell + "\"}}";
-                docBroker->forwardToChild(_session.client_from_this(),
-                    "uno .uno:GoToCell " + goToArgs);
-
-                std::string enterArgs = "{\"StringName\":{\"type\":\"string\",\"value\":\""
+                std::string setArgs = "{\"Cell\":{\"type\":\"string\",\"value\":\""
+                    + escapedCell + "\"},\"Formula\":{\"type\":\"string\",\"value\":\""
                     + escapedFormula + "\"}}";
                 docBroker->forwardToChild(_session.client_from_this(),
-                    "uno .uno:EnterString " + enterArgs);
+                    "uno .uno:SetCellFormula " + setArgs);
 
                 Poco::JSON::Object::Ptr r = new Poco::JSON::Object();
                 r->set("cell", cell);
                 r->set("formula", formula);
                 resultArr.add(r);
+
+                lastCell = escapedCell;
+            }
+
+            // Leave the cursor on the last cell written, so the user sees the result.
+            if (!lastCell.empty())
+            {
+                std::string goToArgs = "{\"ToPoint\":{\"type\":\"string\",\"value\":\""
+                    + lastCell + "\"}}";
+                docBroker->forwardToChild(_session.client_from_this(),
+                    "uno .uno:GoToCell " + goToArgs);
             }
 
             // Continue tool loop with success
@@ -2527,7 +2539,7 @@ void AIChatSession::handleExpansionResponse(int statusCode, const std::string& b
                 JsonUtil::parseJSON(slideStr, slide);
         }
         if (!slide && (argsObj->has("intent") || argsObj->has("blocks")))
-            slide = argsObj;
+            slide = std::move(argsObj);
     }
     if (!slide)
     {
@@ -2871,7 +2883,7 @@ bool AIChatSession::handleImageGeneration(const std::string& prompt,
 
     // Send image result via aichatresult with imageData field
     auto clientSessionPtr = _session.client_from_this();
-    auto sendImageResult = [clientSession = clientSessionPtr, requestId](
+    auto sendImageResult = [clientSession = std::move(clientSessionPtr), requestId](
                                bool success, const std::string& imageData,
                                const std::string& error)
     {
@@ -2891,7 +2903,8 @@ bool AIChatSession::handleImageGeneration(const std::string& prompt,
     AIChatSession* self = this;
 
     // Shared completion handler, invoked on the document broker's polling thread.
-    auto onResponse = [self, sendImageResult](int statusCode, const std::string& body)
+    auto onResponse = [self, sendImageResult = std::move(sendImageResult)](int statusCode,
+                                                                           const std::string& body)
     {
         self->_activeChatSession.reset();
 
@@ -2921,7 +2934,7 @@ bool AIChatSession::handleImageGeneration(const std::string& prompt,
         onResponse(static_cast<int>(r->statusLine().statusCode()), r->getBody());
     });
     req.httpSession->setConnectFailHandler(
-        [onResponse](const std::shared_ptr<http::Session>& /*session*/)
+        [onResponse = std::move(onResponse)](const std::shared_ptr<http::Session>& /*session*/)
     {
         onResponse(ai::HttpConnectFailed, std::string());
     });
@@ -3075,8 +3088,8 @@ void AIChatSession::generateNextTransformImage(const std::shared_ptr<DocumentBro
 
         // Shared completion handler, invoked on the document broker's polling thread.
         auto onResponse =
-            [clientSessionPtr, self, docBroker, idx, onImageFail](int statusCode,
-                                                                  const std::string& body)
+            [clientSessionPtr = std::move(clientSessionPtr), self, docBroker, idx,
+             onImageFail = std::move(onImageFail)](int statusCode, const std::string& body)
         {
             self->_activeChatSession.reset();
 
@@ -3179,7 +3192,7 @@ void AIChatSession::generateNextTransformImage(const std::shared_ptr<DocumentBro
             onResponse(static_cast<int>(r->statusLine().statusCode()), r->getBody());
         });
         req.httpSession->setConnectFailHandler(
-            [onResponse](const std::shared_ptr<http::Session>& /*session*/)
+            [onResponse = std::move(onResponse)](const std::shared_ptr<http::Session>& /*session*/)
         {
             onResponse(ai::HttpConnectFailed, std::string());
         });

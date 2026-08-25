@@ -132,6 +132,8 @@ struct PamFunctions
     int (*start)(const char*, const char*, const struct pam_conv*, pam_handle_t**) = nullptr;
     int (*authenticate)(pam_handle_t*, int) = nullptr;
     int (*end)(pam_handle_t*, int) = nullptr;
+    /// The dlopen handle, or null when the library was never loaded. It is never closed.
+    void* handle = nullptr;
     bool loaded() const { return start && authenticate && end; }
 };
 
@@ -148,6 +150,7 @@ const PamFunctions& getPamFunctions()
             return fns;
         }
 
+        fns.handle = lib;
         fns.start = reinterpret_cast<decltype(fns.start)>(dlsym(lib, "pam_start"));
         fns.authenticate = reinterpret_cast<decltype(fns.authenticate)>(dlsym(lib, "pam_authenticate"));
         fns.end = reinterpret_cast<decltype(fns.end)>(dlsym(lib, "pam_end"));
@@ -281,6 +284,40 @@ std::string stringifyBoolFromConfig(const Poco::Util::LayeredConfiguration& conf
                                     const std::string& propertyName, bool defaultValue)
 {
     return config.getBool(propertyName, defaultValue) ? "true" : "false";
+}
+
+/// Fills in the zoom a server administrator chose for everyone in coolwsd.xml. Either one becomes
+/// an empty string when coolwsd.xml leaves that setting unset.
+void applyZoomConfig(std::string& fileContent, const Poco::Util::LayeredConfiguration& config)
+{
+    // The zoom levels a document can open at, in percent. A level is named by its position here,
+    // counted from zero.
+    const std::vector<int> zoomLevelPercentages = { 20,  25,  30,  35,  40,  50,
+                                                    60,  70,  85,  100, 120, 150,
+                                                    170, 200, 235, 280, 335, 400 };
+
+    std::string smartZoom;
+    if (!config.getString("user_interface.smart_zoom", std::string()).empty())
+        smartZoom = stringifyBoolFromConfig(config, "user_interface.smart_zoom", true);
+
+    std::string defaultZoom;
+    const std::string configuredZoom =
+        config.getString("user_interface.default_zoom", std::string());
+    if (!configuredZoom.empty())
+    {
+        const int percentage = NumUtil::i32FromString(configuredZoom, 0);
+        const auto level =
+            std::find(zoomLevelPercentages.begin(), zoomLevelPercentages.end(), percentage);
+        if (level == zoomLevelPercentages.end())
+            LOG_WRN("Ignoring user_interface.default_zoom ["
+                    << configuredZoom << "] because it is not one of the zoom levels a document "
+                                         "can open at");
+        else
+            defaultZoom = std::to_string(std::distance(zoomLevelPercentages.begin(), level));
+    }
+
+    Poco::replaceInPlace(fileContent, std::string("%SMART_ZOOM%"), smartZoom);
+    Poco::replaceInPlace(fileContent, std::string("%DEFAULT_ZOOM%"), defaultZoom);
 }
 
 /// Returns true if the host is allowed, false otherwise.
@@ -485,6 +522,12 @@ bool FileServerRequestHandler::handleRequest(const HTTPRequest& request,
         if (relPath.starts_with("/wopi/files"))
         {
             handleWopiRequest(request, requestDetails, message, socket);
+            return true;
+        }
+
+        if (relPath.starts_with("/wopi/documents"))
+        {
+            handleDocumentsRequest(request, message, socket);
             return true;
         }
 
@@ -1574,6 +1617,8 @@ FileServerRequestHandler::ResourceAccessDetails FileServerRequestHandler::prepro
         config.getBool("user_interface.statusbar_save_indicator", false) ? "true" : "false";
     Poco::replaceInPlace(preprocess, std::string("%STATUSBAR_SAVE_INDICATOR%"), useStatusbarSaveIndicator);
 
+    applyZoomConfig(preprocess, config);
+
     updateThemeResources(preprocess, responseRoot, urv[BRANDING_THEME], config);
 
     Poco::replaceInPlace(preprocess, CSS_VARS, cssVarsToStyle(urv[CSS_VARS]));
@@ -2101,6 +2146,13 @@ void FileServerRequestHandler::fetchWopiSettingConfigs(const Poco::Net::HTTPRequ
 
 namespace
 {
+// The largest body fetch-settings-file accepts from the storage server, in bytes. The files it
+// relays are settings JSON, xcu configuration and wordbook dictionaries. The biggest of those in
+// practice is a wordbook, and a whole-language spelling dictionary, the ceiling for one, is about
+// 4.5 MB, so 20 MB leaves generous headroom while bounding what one request can hold in memory
+// on the thread that serves every client.
+constexpr int64_t MaxSettingFileSizeBytes = 20 * 1024 * 1024;
+
 // Return the setting-file name a settings request refers to, taken from the
 // last path segment of the WOPI file URL (query stripped). Used to single out
 // viewsetting.json, the only settings file that carries user secrets.
@@ -2276,6 +2328,15 @@ void FileServerRequestHandler::fetchSettingFile(const Poco::Net::HTTPRequest& re
         }
 
         const auto httpResponse = wopiSession->response();
+        if (httpResponse->state() != http::Response::State::Complete)
+        {
+            LOG_ERR("Failed to fetch setting file from [" << uriAnonym
+                    << "]: the transfer did not complete");
+            sendError(http::StatusCode::BadGateway, requestPath, destSocket, shortMessage,
+                      "The transfer did not complete");
+            return;
+        }
+
         if (httpResponse->statusLine().statusCode() != http::StatusCode::OK)
         {
             LOG_ERR("Failed to fetch setting file from [" << uriAnonym
@@ -2300,7 +2361,12 @@ void FileServerRequestHandler::fetchSettingFile(const Poco::Net::HTTPRequest& re
     LOG_DBG("Fetching setting file from [" << uriAnonym << ']');
     auto httpSession = StorageConnectionManager::getHttpSession(dicUrl);
     httpSession->setFinishedHandler(std::move(finishedCallback));
-    httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll());
+    if (!httpSession->asyncRequest(httpRequest, COOLWSD::getWebServerPoll()))
+        return;
+
+    // asyncRequest has created the response object, and no body is read until this function
+    // returns, so the limit is in place before the first byte arrives.
+    httpSession->response()->setBodySizeLimit(MaxSettingFileSizeBytes);
 }
 
 void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request,
@@ -2478,7 +2544,7 @@ void FileServerRequestHandler::fetchModels(const Poco::Net::HTTPRequest& request
     storedRequest.set("Content-Type", "text/plain");
 
     http::Session::FinishedCallback storedCallback =
-        [fetchWithKey, secretField, socketWeak, storedUriAnonym,
+        [fetchWithKey = std::move(fetchWithKey), secretField, socketWeak, storedUriAnonym,
          requestPath = getRequestPath(request),
          shortMessage](const std::shared_ptr<http::Session>& wopiSession)
     {
@@ -2925,6 +2991,8 @@ void FileServerRequestHandler::preprocessIntegratorAdminFile(const HTTPRequest& 
     const std::string showLeftNav = form.get("show_left_nav", "false");
     Poco::replaceInPlace(adminFile, std::string("%SHOW_LEFT_NAV%"),
                          std::string(showLeftNav == "true" ? "true" : "false"));
+
+    applyZoomConfig(adminFile, config);
 
     updateThemeResources(adminFile, responseRoot, urv[BRANDING_THEME], config);
 

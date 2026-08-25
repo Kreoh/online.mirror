@@ -821,7 +821,7 @@ class DebugManager {
 		// Set zoom
 		const targetZoom = Math.floor(Math.random() * 9) + 6; // 6 to 14, 50% to 200%
 		window.app.console.log('Randomize Settings: Set zoom to ' + targetZoom);
-		this._map.setZoom(targetZoom, null, false);
+		app.activeDocument.activeLayout.applyZoom(targetZoom);
 
 		// Toggle spell check
 		const isSpellCheck =
@@ -864,10 +864,10 @@ class DebugManager {
 			const pos = positions[Math.floor(Math.random() * positions.length)];
 
 			// Calculate mouse click position
-			const viewSize = this._map.getSize();
+			const frame = app.activeDocument.activeLayout.frameSize;
 			const centerPos = {
-				x: pos.x + viewSize.x / 2,
-				y: pos.y + viewSize.y / 2,
+				x: pos.x + frame.cX / 2,
+				y: pos.y + frame.cY / 2,
 			};
 			const centerTwips = this._docLayer._pixelsToTwips(centerPos);
 
@@ -1032,9 +1032,23 @@ class DebugManager {
 			case 0:
 				{
 					window.app.console.log('Automated User: Click in center');
-					const pos = this._docLayer._internToTwips(this._map.getCenter());
-					this._docLayer._postMouseEvent('buttondown', pos.x, pos.y, 1, 1, 0);
-					this._docLayer._postMouseEvent('buttonup', pos.x, pos.y, 1, 1, 0);
+					const center = app.activeDocument.activeLayout.viewedRectangle.center;
+					this._docLayer._postMouseEvent(
+						'buttondown',
+						center[0],
+						center[1],
+						1,
+						1,
+						0,
+					);
+					this._docLayer._postMouseEvent(
+						'buttonup',
+						center[0],
+						center[1],
+						1,
+						1,
+						0,
+					);
 					waitTime = 500;
 				}
 				break;
@@ -1112,9 +1126,23 @@ class DebugManager {
 			case 3:
 				{
 					window.app.console.log('Automated User: Select Shape');
-					const pos = this._docLayer._internToTwips(this._map.getCenter());
-					this._docLayer._postMouseEvent('buttondown', pos.x, pos.y, 1, 1, 0);
-					this._docLayer._postMouseEvent('buttonup', pos.x, pos.y, 1, 1, 0);
+					const center = app.activeDocument.activeLayout.viewedRectangle.center;
+					this._docLayer._postMouseEvent(
+						'buttondown',
+						center[0],
+						center[1],
+						1,
+						1,
+						0,
+					);
+					this._docLayer._postMouseEvent(
+						'buttonup',
+						center[0],
+						center[1],
+						1,
+						1,
+						0,
+					);
 					waitTime = 1000;
 				}
 				break;

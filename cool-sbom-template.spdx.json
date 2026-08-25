@@ -2,7 +2,7 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
-  "name": "Collabora Online",
+  "name": "Online Office",
   "documentNamespace": "http://spdx.org/spdxdocs/coolwsd-24.04.10.3",
   "creationInfo": {
     "creators": [
@@ -22,7 +22,7 @@
         {
           "referenceCategory": "SECURITY",
           "referenceType": "vulnerability",
-          "referenceLocator": "https://github.com/CollaboraOnline/online/security/advisories"
+          "referenceLocator": "https://github.com/Kreoh/online.mirror/security/advisories"
         }
       ]
     },
@@ -208,6 +208,53 @@
       "filesAnalyzed": false,
       "downloadLocation": "https://gist.github.com/tomykaira/f0fd86b6c73063283afe550bc5d77594",
       "licenseConcluded": "MIT"
+    },
+    {
+      "SPDXID": "SPDXRef-spookyhash",
+      "name": "SpookyHash V2 - 128-bit noncryptographic hash function",
+      "versionInfo": "2",
+      "filesAnalyzed": false,
+      "downloadLocation": "https://burtleburtle.net/bob/hash/spooky.html",
+      "licenseConcluded": "LicenseRef-PublicDomain"
+    },
+    {
+      "SPDXID": "SPDXRef-cairo",
+      "name": "cairo - derived PNG output code",
+      "versionInfo": "NONE",
+      "filesAnalyzed": false,
+      "downloadLocation": "https://www.cairographics.org/",
+      "licenseConcluded": "LGPL-2.1-only OR MPL-1.1"
+    },
+    {
+      "SPDXID": "SPDXRef-marked",
+      "name": "Marked - markdown parser and compiler",
+      "versionInfo": "15.0.6",
+      "filesAnalyzed": false,
+      "downloadLocation": "NONE",
+      "licenseConcluded": "MIT"
+    },
+    {
+      "SPDXID": "SPDXRef-d3",
+      "name": "D3.js",
+      "versionInfo": "6.7.0",
+      "filesAnalyzed": false,
+      "downloadLocation": "NONE",
+      "licenseConcluded": "BSD-3-Clause"
+    },
+    {
+      "SPDXID": "SPDXRef-basejs",
+      "name": "Base.js - simple JavaScript inheritance",
+      "versionInfo": "1.1a",
+      "filesAnalyzed": false,
+      "downloadLocation": "https://dean.edwards.name/weblog/2006/03/base/",
+      "licenseConcluded": "MIT"
+    }
+  ],
+  "hasExtractedLicensingInfos": [
+    {
+      "licenseId": "LicenseRef-PublicDomain",
+      "name": "Public Domain",
+      "extractedText": "SpookyHash: a 128-bit noncryptographic hash function. By Bob Jenkins, public domain."
     }
   ],
   "relationships": [
@@ -289,11 +336,6 @@
     {
       "spdxElementId": "SPDXRef-coolwsd",
       "relationshipType": "CONTAINS",
-      "relatedSpdxElement": "SPDXRef-jquery-contextMenu"
-    },
-    {
-      "spdxElementId": "SPDXRef-coolwsd",
-      "relationshipType": "CONTAINS",
       "relatedSpdxElement": "SPDXRef-jquery-ui"
     },
     {
@@ -320,6 +362,41 @@
       "spdxElementId": "SPDXRef-coolwsd",
       "relationshipType": "CONTAINS",
       "relatedSpdxElement": "SPDXRef-Montserrat"
+    },
+    {
+      "spdxElementId": "SPDXRef-coolwsd",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-macaron"
+    },
+    {
+      "spdxElementId": "SPDXRef-coolwsd",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-spookyhash"
+    },
+    {
+      "spdxElementId": "SPDXRef-coolwsd",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-leaflet"
+    },
+    {
+      "spdxElementId": "SPDXRef-coolwsd",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-cairo"
+    },
+    {
+      "spdxElementId": "SPDXRef-coolwsd",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-marked"
+    },
+    {
+      "spdxElementId": "SPDXRef-coolwsd",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-d3"
+    },
+    {
+      "spdxElementId": "SPDXRef-coolwsd",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-basejs"
     }
   ]
 }

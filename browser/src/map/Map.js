@@ -3,7 +3,7 @@
  * window.L.Map is the central class of the API - it is used to create a map.
  */
 
-/* global app _ Cursor JSDialog RenderManager cool InternPointUtil InternBoundsUtil OverviewFade */
+/* global app _ Cursor JSDialog RenderManager cool InternPointUtil */
 
 window.L.Map = window.L.Evented.extend({
 
@@ -23,7 +23,6 @@ window.L.Map = window.L.Evented.extend({
 		// percentages available are then rounded to the nearest five percent.
 		minZoom: 1,
 		maxZoom: 18,
-		maxBounds: InternBoundsUtil.flexConstruct([0, 0], [100, 100]),
 		fadeAnimation: false, // Not useful for typing.
 		markerZoomAnimation: true,
 		// defaultZoom:
@@ -81,16 +80,18 @@ window.L.Map = window.L.Evented.extend({
 		this._initEvents();
 		this._cacheSVG = [];
 
-		if (options.maxBounds) {
-			this.setMaxBounds(options.maxBounds);
-		}
-
 		if (options.zoom !== undefined) {
 			this._zoom = this._limitZoom(options.zoom);
 		}
 
 		if (options.center && options.zoom !== undefined) {
-			this.setView(InternPointUtil.flexConstruct(options.center), options.zoom, true /* reset */);
+			// Establish the initial map state directly (was setView -> _resetView,
+			// which ran before the doc layer/layout existed so its map events had no
+			// listeners and its setViewRectangleFromPointAndScale was skipped). The
+			// zoom is set just above; the first viewed rectangle and tile kickoff
+			// come later from the doc layer's onAdd (applyZoom / _viewReset). Only
+			// _loaded needs to be set here.
+			this._loaded = true;
 		}
 
 		Cursor.imagePath = options.cursorURL;
@@ -99,7 +100,6 @@ window.L.Map = window.L.Evented.extend({
 		this._handlers = [];
 		this._layers = {};
 		this._zoomBoundLayers = {};
-		this._sizeChanged = true;
 		this._bDisableKeyboard = false;
 		this._fatal = false;
 		this._enabled = true;
@@ -125,8 +125,6 @@ window.L.Map = window.L.Evented.extend({
 		this.callInitHooks();
 
 		this.addHandler('keyboard', window.L.Map.Keyboard);
-
-		this.addHandler('scrollHandler', window.L.Map.Scroll);
 
 		this._addLayers(this.options.layers);
 		app.socket = new app.definitions.Socket(this);
@@ -179,7 +177,6 @@ window.L.Map = window.L.Evented.extend({
 			if (window.mode.isSmallScreenDevice())
 			{
 				document.getElementById('document-container').classList.add('mobile');
-				this._size = new cool.Point(0,0);
 				this.showCalcInputBar();
 			}
 		});
@@ -482,47 +479,6 @@ window.L.Map = window.L.Evented.extend({
 		this.fire('removeview', {viewId: viewid, username: username});
 	},
 
-	panBy: function (offset) {
-		offset = cool.Point.toPoint(offset).round();
-
-		if (!offset.x && !offset.y)
-			return this;
-
-		if (this._docLayer && this._docLayer._docType === 'text' && offset.x != 0 &&
-			app.activeDocument.activeLayout.type === 'ViewLayoutWriter')
-			offset.x += (app.activeDocument.activeLayout).getDocumentScrollOffset();
-
-		//If we pan too far then chrome gets issues with tiles
-		// and makes them disappear or appear in the wrong place (slightly offset) #2602
-		if (!this.getSize().contains(offset)) {
-			this._resetView(this.unproject(this.project(this.getCenter()).add(offset)), this.getZoom());
-			return this;
-		}
-
-		this.fire('movestart');
-		window.L.DomUtil.setPosition(this._mapPane, this._getMapPanePos().subtract(offset));
-		this.fire('move').fire('moveend');
-
-		return this;
-	},
-
-	setView: function (center, zoom, reset) {
-		zoom = zoom === undefined ? this._zoom : this._limitZoom(zoom);
-		center = this._limitCenter(InternPointUtil.flexConstruct(center), zoom, this.options.maxBounds);
-
-		if (this._loaded && !reset && zoom === this._zoom) {
-			// difference between the new and current centers in pixels
-			var offset = this._getCenterOffset(center)._floor();
-			this.panBy(offset);
-			return this;
-		}
-		else {
-			this._resetView(center, zoom);
-
-			return this;
-		}
-	},
-
 	updateAvatars: function() {
 		if (this._docLayer && this._docLayer._annotations && this._docLayer._annotations._items) {
 			for (var idxAnno in this._docLayer._annotations._items) {
@@ -618,96 +574,6 @@ window.L.Map = window.L.Evented.extend({
 		return Math.pow(InternPointUtil.SCALE, (zoom - this.options.zoom));
 	},
 
-	getDesktopCalcZoomCenter: function() {
-		const docLayer = this._docLayer;
-
-		if (app.calc.cellCursorRectangle) {
-			const twipsTopLeft = [app.calc.cellCursorRectangle.x1, app.calc.cellCursorRectangle.y1];
-			const cursorInBounds = app.activeDocument.activeLayout.viewedRectangle.containsPoint(twipsTopLeft);
-
-			if (cursorInBounds) {
-				return new cool.Point(...twipsTopLeft);
-			}
-		}
-
-		if (docLayer._cellSelectionArea) {
-			const twipsCenter = docLayer._cellSelectionArea.center;
-			const selectionInBounds = app.activeDocument.activeLayout.viewedRectangle.containsPoint(twipsCenter);
-
-			if (selectionInBounds) {
-				return new cool.Point(...twipsCenter);
-			}
-		}
-
-		const viewBounds = this.getPixelBoundsCore();
-		return docLayer._corePixelsToTwips(viewBounds.getCenter());
-	},
-
-	setDesktopCalcViewOnZoom: function (zoom, animate) {
-		zoom = this._limitZoom(zoom);
-
-		if (zoom === this.getZoom()) {
-			return;
-		}
-
-		const docLayer = this._docLayer;
-		if (!docLayer.options.sheetGeometryDataEnabled || !docLayer.sheetGeometry)
-			return false;
-
-		const typing = app.file.textCursor.visible;
-
-		const tsManager = docLayer._painter;
-
-		const ctx = tsManager._paintContext();
-		const splitPos = ctx.splitPos;
-		const viewBounds = ctx.viewBounds;
-		const freePaneBounds = new cool.Bounds(viewBounds.min.add(splitPos), viewBounds.max);
-
-		const zoomCenter = docLayer._twipsToCorePixels(this.getDesktopCalcZoomCenter());
-
-		tsManager._offset = new cool.Point(0, 0);
-		const docPos = docLayer._painter._getZoomDocPos(
-			zoomCenter,
-			zoomCenter,
-			freePaneBounds,
-			{ freezeX: false, freezeY: false },
-			splitPos,
-			this.getZoomScale(zoom),
-			true
-		);
-
-		const newCenterIntern = this.unproject(docPos.center.divideBy(app.dpiScale), zoom);
-
-		this._ignoreCursorUpdate = true;
-
-		const mapUpdater = (animationCalculatedNewCenter) => {
-			if (animationCalculatedNewCenter) {
-				this._resetView(InternPointUtil.flexConstruct(animationCalculatedNewCenter), zoom);
-				return;
-			}
-
-			this._resetView(InternPointUtil.flexConstruct(newCenterIntern), zoom);
-		};
-		const runAtFinish = () => {
-			this._ignoreCursorUpdate = false;
-			if (typing) {
-				docLayer.activateCursor();
-			}
-		};
-
-		if (animate) {
-			this._docLayer.runZoomAnimation(
-				zoom,
-				this.unproject(zoomCenter.divideBy(app.dpiScale), this.getZoom()),
-				mapUpdater,
-				runAtFinish);
-			return;
-		}
-
-		mapUpdater(newCenterIntern);
-		runAtFinish();
-	},
-
 	ignoreCursorUpdate: function () {
 		return this._ignoreCursorUpdate;
 	},
@@ -737,169 +603,6 @@ window.L.Map = window.L.Evented.extend({
 		}
 	},
 
-	setZoom: function (zoom, options, animate) {
-		// do not animate zoom when in a cypress test.
-		if (animate && window.L.Browser.cypressTest)
-			animate = false;
-
-		if (this._docLayer instanceof window.L.CanvasTileLayer) {
-			if (!zoom)
-				zoom = this._clientZoom || this.options.zoom;
-			else
-				this._clientZoom = zoom;
-		}
-
-		if (!this._loaded) {
-			this._zoom = this._limitZoom(zoom);
-			return this;
-		}
-
-		// Do not animate zoom in multi-page or compare changes view.
-		if (animate && app.activeDocument &&
-			['ViewLayoutMultiPage', 'ViewLayoutCompareChanges'].includes(app.activeDocument.activeLayout.type))
-			animate = false;
-
-		var curCenter = this.getCenter();
-		if (this._docLayer && this._docLayer._docType === 'spreadsheet') {
-			// for spreadsheets, when the document is smaller than the viewing area
-			// we want it to be glued to the row/column headers instead of being centered
-			this._docLayer._checkSpreadSheetBounds(zoom);
-			if (window.mode.isDesktop()) {
-				return this.setDesktopCalcViewOnZoom(zoom, animate);
-			}
-		}
-
-		this._docLayer.setZoomChanged(true);
-		var thisObj = this;
-		var cssBounds = this.getPixelBounds();
-		var mapUpdater;
-		var runAtFinish;
-		if (this._docLayer && app.file.textCursor.visible && app.activeDocument.activeLayout.viewedRectangle.containsPoint(app.file.textCursor.rectangle.center)) {
-			// Calculate new center after zoom. The intent is that the caret
-			// position stays the same.
-			var zoomScale = 1.0 / this.getZoomScale(zoom, this._zoom);
-			var caretPos = this._docLayer._twipsToIntern({ x: app.file.textCursor.rectangle.center[0], y: app.file.textCursor.rectangle.center[1] });
-			var newCenter = InternPointUtil.flexConstruct(curCenter.x + (caretPos.x - curCenter.x) * (1.0 - zoomScale),
-						     curCenter.y + (caretPos.y - curCenter.y) * (1.0 - zoomScale));
-
-			mapUpdater = function() {
-				thisObj.setView(newCenter, zoom);
-			};
-			runAtFinish = function() {
-				thisObj._docLayer.setZoomChanged(false);
-			};
-
-			if (animate) {
-				this._docLayer.runZoomAnimation(zoom,
-					// pinchCenter
-					InternPointUtil.flexConstruct(
-						// Use the current x-center if there is a left margin.
-						cssBounds.min.x < 0 ? curCenter.x : caretPos.x,
-						// Use the current y-center if there is a top margin.
-						cssBounds.min.y < 0 ? curCenter.y : caretPos.y),
-					mapUpdater,
-					runAtFinish);
-			} else {
-				mapUpdater();
-				runAtFinish();
-			}
-
-			return;
-		}
-
-		mapUpdater = function() {
-			thisObj.setView(curCenter, zoom);
-		};
-
-		runAtFinish = function() {
-			thisObj._docLayer.setZoomChanged(false);
-		};
-
-		if (animate) {
-			this._docLayer.runZoomAnimation(zoom,
-				// pinchCenter
-				curCenter,
-				mapUpdater,
-				runAtFinish);
-		} else {
-			mapUpdater();
-			runAtFinish();
-		}
-	},
-
-	zoomIn: function (delta, options, animate) {
-		const requestedZoom = this._zoom + (delta || 1);
-		if (OverviewFade.handleZoomBeyondLimit(requestedZoom))
-			return this;
-		return this.setZoom(requestedZoom, options, animate);
-	},
-
-	zoomOut: function (delta, options, animate) {
-		const requestedZoom = this._zoom - (delta || 1);
-		if (OverviewFade.handleZoomBeyondLimit(requestedZoom))
-			return this;
-		return this.setZoom(requestedZoom, options, animate);
-	},
-
-	panTo: function (center) { // (Intern)
-		return this.setView(center, this._zoom);
-	},
-
-	setMaxBounds: function (bounds) {
-		bounds = InternBoundsUtil.flexConstruct(bounds);
-
-		this.options.maxBounds = bounds;
-
-		if (this._loaded) {
-			this.panInsideBounds(this.options.maxBounds);
-		}
-	},
-
-	panInsideBounds: function (bounds) {
-		var center = this.getCenter(),
-		    newCenter = this._limitCenter(center, this._zoom, bounds);
-
-		if (center.equals(newCenter)) { return this; }
-		if (this.distance(center, newCenter) < 0.0000001) { return this; }
-
-		return this.panTo(newCenter);
-	},
-
-	// If map size has already been updated, invalidateSize needs the oldSize to work properly
-	// (e.g. if getSize() has already been called with _sizeChanged === true)
-	invalidateSize: function (debounceMoveend, oldSize) {
-		if (!this._loaded) { return this; }
-
-		if (!oldSize) oldSize = this.getSize();
-		this._sizeChanged = true;
-		const newSize = this.getSize();
-
-		if (oldSize.x === newSize.x && oldSize.y === newSize.y)
-			return this;
-
-		this.fire('move');
-
-		if (debounceMoveend) {
-			clearTimeout(this._sizeTimer);
-			this._sizeTimer = setTimeout(window.L.bind(this.fire, this, 'moveend'), 200);
-		} else {
-			this.fire('moveend');
-		}
-
-		return this.fire('resize', {
-			oldSize: oldSize,
-			newSize: newSize
-		});
-	},
-
-	stop: function () {
-		app.util.cancelAnimFrame(this._flyToFrame);
-		if (this._panAnim) {
-			this._panAnim.stop();
-		}
-		return this;
-	},
-
 	// TODO handler.addTo
 	addHandler: function (name, HandlerClass) {
 		if (!HandlerClass) { return this; }
@@ -907,9 +610,6 @@ window.L.Map = window.L.Evented.extend({
 		var handler = this[name] = new HandlerClass(this);
 
 		this._handlers.push(handler);
-
-		if (name === 'scrollHandler')
-			this.scrollHandler = handler; // Reference for external use.
 
 		if (this.options[name]) {
 			handler.enable();
@@ -986,79 +686,8 @@ window.L.Map = window.L.Evented.extend({
 		return this._viewInfo[viewid].readonly !== '0';
 	},
 
-	getCenter: function () { // (Boolean) -> Intern
-		this._checkIfLoaded();
-		return this.layerPointToIntern(this._getCenterLayerPoint());
-	},
-
 	getZoom: function () {
 		return this._zoom;
-	},
-
-	getZoomPercent: function() {
-		let zoomPercent = 100;
-		switch (this._zoom) {
-			case 1:  zoomPercent =  20; break;  // 0.2102
-			case 2:  zoomPercent =  25; break;  // 0.2500
-			case 3:  zoomPercent =  30; break;  // 0.2973
-			case 4:  zoomPercent =  35; break;  // 0.3535
-			case 5:  zoomPercent =  40; break;  // 0.4204
-			case 6:  zoomPercent =  50; break;  // 0.5
-			case 7:  zoomPercent =  60; break;  // 0.5946
-			case 8:  zoomPercent =  70; break;  // 0.7071
-			case 9:  zoomPercent =  85; break;  // 0.8409
-			case 10: zoomPercent = 100; break; // 1
-			case 11: zoomPercent = 120; break; // 1.1892
-			// Why do we call this 150% even if it is actually closer to 140%
-			case 12: zoomPercent = 150; break; // 1.4142
-			case 13: zoomPercent = 170; break; // 1.6818
-			case 14: zoomPercent = 200; break; // 2
-			case 15: zoomPercent = 235; break; // 2.3784
-			case 16: zoomPercent = 280; break; // 2.8284
-			case 17: zoomPercent = 335; break; // 3.3636
-			case 18: zoomPercent = 400; break; // 4
-			default:
-				var zoomRatio = this.getZoomScale(this.getZoom(), this.options.zoom);
-				zoomPercent = this.getZoomPercent( Math.round( this.getScaleZoom(zoomRatio) ) ); // this will return one of the above percentages
-			break;
-		}
-		return zoomPercent;
-	},
-
-	getZoomIndex: function(zoomPercent) {
-		let zoomIndex = 0;
-		switch(zoomPercent) {
-			case 20: zoomIndex = 1; break;
-			case 25: zoomIndex = 2; break;
-			case 30: zoomIndex = 3; break;
-			case 35: zoomIndex = 4; break;
-			case 40: zoomIndex = 5; break;
-			case 50: zoomIndex = 6; break;
-			case 60: zoomIndex = 7; break;
-			case 70: zoomIndex = 8; break;
-			case 85: zoomIndex = 9; break;
-			case 100: zoomIndex = 10; break;
-			case 120: zoomIndex = 11; break;
-			case 150: zoomIndex = 12; break;
-			case 170: zoomIndex = 13; break;
-			case 200: zoomIndex = 14; break;
-			case 235: zoomIndex = 15; break;
-			case 280: zoomIndex = 16; break;
-			case 335: zoomIndex = 17; break;
-			case 400: zoomIndex = 18; break;
-			default:
-			//TODO: calculate the nearest index
-				zoomIndex = 10;
-		}
-		return zoomIndex;
-	},
-
-	getBounds: function () {
-		var bounds = this.getPixelBounds(),
-		    tl = this.unproject(bounds.getTopLeft()),
-		    br = this.unproject(bounds.getBottomRight());
-
-		return InternBoundsUtil.flexConstruct(tl, br);
 	},
 
 	getMinZoom: function () {
@@ -1069,42 +698,6 @@ window.L.Map = window.L.Evented.extend({
 		return this.options.maxZoom === undefined ?
 			(this._layersMaxZoom === undefined ? Infinity : this._layersMaxZoom) :
 			this.options.maxZoom;
-	},
-
-	getLayerMaxBounds: function () {
-		const tl = InternBoundsUtil.getTopLeft(this.options.maxBounds);
-		const br = InternBoundsUtil.getBottomRight(this.options.maxBounds);
-		return cool.Bounds.toBounds(this.internToLayerPoint(tl),
-			this.internToLayerPoint(br));
-	},
-
-	getSize: function () {
-		if (!this._size || this._sizeChanged) {
-			this._size = new cool.Point(
-				this._container.clientWidth,
-				this._container.clientHeight);
-
-			this._sizeChanged = false;
-		}
-
-		return this._size.clone();
-	},
-
-	getPixelBounds: function (center, zoom) {
-		var topLeftPoint = this._getTopLeftPoint(center, zoom);
-		return new cool.Bounds(topLeftPoint, topLeftPoint.add(this.getSize()));
-	},
-
-	getPixelBoundsCore: function (center, zoom) {
-		var bounds = this.getPixelBounds(center, zoom);
-		bounds.min = bounds.min.multiplyBy(app.dpiScale);
-		bounds.max = bounds.max.multiplyBy(app.dpiScale);
-		return bounds;
-	},
-
-	getPixelOrigin: function () {
-		this._checkIfLoaded();
-		return this._pixelOrigin;
 	},
 
 	getPane: function (pane) {
@@ -1155,142 +748,6 @@ window.L.Map = window.L.Evented.extend({
 						this.formulabar.isInEditMode())))
 		)
 			app.dispatcher.dispatch('acceptformula');
-	},
-
-	// TODO replace with universal implementation after refactoring projections
-
-	getZoomScale: function (toZoom, fromZoom) {
-		fromZoom = fromZoom === undefined ? this.getZoom() : fromZoom;
-		return InternPointUtil.scale(toZoom) / InternPointUtil.scale(fromZoom);
-	},
-
-	getScaleZoom: function (scale, fromZoom) {
-		fromZoom = fromZoom === undefined ? this.getZoom() : fromZoom;
-		return fromZoom + (Math.log(scale) / Math.log(InternPointUtil.SCALE));
-	},
-
-
-	// conversion methods
-
-	project: function (intern, zoom) { // (Intern[, Number]) -> Point
-		zoom = zoom === undefined ? this.getZoom() : zoom;
-		var projectedPoint = InternPointUtil.internToPoint(InternPointUtil.flexConstruct(intern), zoom);
-		return new cool.Point(app.util.round(projectedPoint.x, 1e-6), app.util.round(projectedPoint.y, 1e-6));
-	},
-
-	unproject: function (point, zoom) { // (Point[, Number]) -> Intern
-		zoom = zoom === undefined ? this.getZoom() : zoom;
-		return InternPointUtil.pointToIntern(new cool.Point(point.x, point.y), zoom);
-	},
-
-	// rescaling
-
-	rescale: function(point, oldZoom, newZoom) {
-		oldZoom = oldZoom === undefined ? this.getZoom() : oldZoom;
-		newZoom = newZoom === undefined ? this.getZoom() : newZoom;
-
-		return InternPointUtil.rescale(point, oldZoom, newZoom);
-	},
-
-	layerPointToIntern: function (point) { // (Point)
-		var projectedPoint = cool.Point.toPoint(point).add(this.getPixelOrigin());
-		return this.unproject(projectedPoint);
-	},
-
-	internToLayerPoint: function (intern) { // (Intern)
-		var projectedPoint = this.project(InternPointUtil.flexConstruct(intern))._round();
-		return projectedPoint._subtract(this.getPixelOrigin());
-	},
-
-	distance: function (intern1, intern2) { // (Intern, Intern) -> number
-		return InternPointUtil.distance(InternPointUtil.flexConstruct(intern1), InternPointUtil.flexConstruct(intern2));
-	},
-
-	containerPointToLayerPoint: function (point) { // (Point)
-		var splitPanesContext = this.getSplitPanesContext();
-		if (!splitPanesContext) {
-			return this.containerPointToLayerPointIgnoreSplits(point);
-		}
-		var splitPos = splitPanesContext.getSplitPos();
-		var pixelOrigin = this.getPixelOrigin();
-		var mapPanePos = this._getMapPanePos();
-		var result = cool.Point.toPoint(point).clone();
-		var pointX = point.x;
-		if (this._docLayer.isCalcRTL()) {
-			pointX = this._container.clientWidth - pointX;
-			result.x = pointX;
-		}
-
-		if (pointX <= splitPos.x) {
-			result.x -= pixelOrigin.x;
-		}
-		else {
-			result.x -= mapPanePos.x;
-		}
-
-		if (point.y <= splitPos.y) {
-			result.y -= pixelOrigin.y;
-		}
-		else {
-			result.y -= mapPanePos.y;
-		}
-
-		return result;
-	},
-
-	containerPointToLayerPointIgnoreSplits: function (point) { // (Point)
-		return cool.Point.toPoint(point).subtract(this._getMapPanePos());
-	},
-
-	layerPointToContainerPoint: function (point) { // (Point)
-		var splitPanesContext = this.getSplitPanesContext();
-		if (!splitPanesContext) {
-			return this.layerPointToContainerPointIgnoreSplits(point);
-		}
-
-		var splitPos = splitPanesContext.getSplitPos();
-		var pixelOrigin = this.getPixelOrigin();
-		var mapPanePos = this._getMapPanePos();
-		var result = cool.Point.toPoint(point).add(pixelOrigin);
-
-		if (result.x > splitPos.x) {
-			result.x -= (pixelOrigin.x - mapPanePos.x);
-		}
-
-		if (result.y > splitPos.y) {
-			result.y -= (pixelOrigin.y - mapPanePos.y);
-		}
-
-		return result;
-	},
-
-	layerPointToContainerPointIgnoreSplits: function (point) { // (Point)
-		return cool.Point.toPoint(point).add(this._getMapPanePos());
-	},
-
-	containerPointToInternIgnoreSplits: function (point) {
-		var layerPoint = this.containerPointToLayerPointIgnoreSplits(cool.Point.toPoint(point));
-		return this.layerPointToIntern(layerPoint);
-	},
-
-	internToContainerPointIgnoreSplits: function (intern) {
-		return this.layerPointToContainerPointIgnoreSplits(this.internToLayerPoint(InternPointUtil.flexConstruct(intern)));
-	},
-
-	internToContainerPoint: function (intern) {
-		return this.layerPointToContainerPoint(this.internToLayerPoint(InternPointUtil.flexConstruct(intern)));
-	},
-
-	mouseEventToContainerPoint: function (e) { // (MouseEvent)
-		return window.L.DomEvent.getMousePosition(e, this._container);
-	},
-
-	mouseEventToLayerPoint: function (e) { // (MouseEvent)
-		return this.containerPointToLayerPoint(this.mouseEventToContainerPoint(e));
-	},
-
-	mouseEventToIntern: function (e) { // (MouseEvent)
-		return this.layerPointToIntern(this.mouseEventToLayerPoint(e));
 	},
 
 	// Give the focus to the text input.
@@ -1404,53 +861,8 @@ window.L.Map = window.L.Evented.extend({
 
 	// private methods that modify map state
 
-	_resetView: function (center, zoom) {
-		var zoomChanged = (this._zoom !== zoom);
-
-		this.fire('movestart');
-
-		if (zoomChanged) {
-			this.fire('zoomstart');
-		}
-
-		this._zoom = zoom;
-
-		window.L.DomUtil.setPosition(this._mapPane, new cool.Point(0, 0));
-
-		this._pixelOrigin = this._getNewPixelOrigin(center);
-
-		var loading = !this._loaded;
-		this._loaded = true;
-
-		this.fire('viewreset', {hard: true});
-
-		if (loading) {
-			this.fire('load');
-		}
-
-		this.fire('move');
-
-		if (zoomChanged) {
-			this.fire('zoomend');
-			this.fire('zoomlevelschange');
-		}
-
-		// don't allow to turn off the following when moving to other sheet
-		var backupFollowed = app.getFollowedViewId();
-
-		this.fire('moveend', {hard: true});
-
-		app.setFollowingUser(backupFollowed);
-	},
-
 	_getZoomSpan: function () {
 		return this.getMaxZoom() - this.getMinZoom();
-	},
-
-	_checkIfLoaded: function () {
-		if (!this._loaded) {
-			throw new Error('Set map center and zoom first.');
-		}
 	},
 
 	// DOM event handling
@@ -1684,13 +1096,6 @@ window.L.Map = window.L.Evented.extend({
 		var data = {
 			originalEvent: e
 		};
-		if (e.type !== 'keypress' && e.type !== 'keyup' && e.type !== 'keydown' &&
-			e.type !== 'copy' && e.type !== 'cut' && e.type !== 'paste' &&
-		    e.type !== 'compositionstart' && e.type !== 'compositionupdate' && e.type !== 'compositionend' && e.type !== 'textInput') {
-			data.containerPoint = this.mouseEventToContainerPoint(e);
-			data.layerPoint = this.containerPointToLayerPoint(data.containerPoint);
-			data.intern = this.layerPointToIntern(data.layerPoint);
-		}
 		if (type === 'click') {
 			target.fire('preclick', data, true);
 		}
@@ -1720,70 +1125,8 @@ window.L.Map = window.L.Evented.extend({
 
 	// private methods for getting map state
 
-	_getMapPanePos: function () {
-		return window.L.DomUtil.getPosition(this._mapPane) || new cool.Point(0, 0);
-	},
-
-	_getTopLeftPoint: function (center, zoom) {
-		var pixelOrigin = center && zoom !== undefined ?
-			this._getNewPixelOrigin(center, zoom) :
-			this.getPixelOrigin();
-
-		return pixelOrigin.subtract(this._getMapPanePos());
-	},
-
-	_getNewPixelOrigin: function (center, zoom) {
-		var viewHalf = this.getSize()._divideBy(2);
-		return this.project(center, zoom)._subtract(viewHalf)._add(this._getMapPanePos())._floor();
-	},
-
-	// layer point of the current center
-	_getCenterLayerPoint: function () {
-		return this.containerPointToLayerPointIgnoreSplits(this.getSize()._divideBy(2));
-	},
-
-	// offset of the specified place to the current center in pixels
-	_getCenterOffset: function (intern) {
-		return this.internToLayerPoint(intern).subtract(this._getCenterLayerPoint());
-	},
 
 	// adjust center for view to get inside bounds
-	_limitCenter: function (center, zoom, bounds) {
-
-		if (!bounds) { return center; }
-
-		var centerPoint = this.project(center, zoom),
-		    viewHalf = this.getSize().divideBy(2),
-		    viewBounds = new cool.Bounds(centerPoint.subtract(viewHalf), centerPoint.add(viewHalf)),
-		    offset = this._getBoundsOffset(viewBounds, bounds, zoom);
-
-		return this.unproject(centerPoint.add(offset), zoom);
-	},
-
-	// returns offset needed for pxBounds to get inside maxBounds at a specified zoom
-	_getBoundsOffset: function (pxBounds, maxBounds, zoom) {
-		const tl = InternBoundsUtil.getTopLeft(maxBounds);
-		const br = InternBoundsUtil.getBottomRight(maxBounds);
-		var tlOffset = this.project(tl, zoom).subtract(pxBounds.min),
-		    brOffset = this.project(br, zoom).subtract(pxBounds.max),
-
-		    dx = this._rebound(tlOffset.x, -brOffset.x),
-		    dy = this._rebound(tlOffset.y, -brOffset.y);
-
-		return new cool.Point(dx, dy);
-	},
-
-	_rebound: function (left, right) {
-		return left + right > 0 ?
-			Math.round(left - right) / 2 :
-			Math.max(0, Math.ceil(left)) - Math.max(0, Math.floor(right));
-		// TODO: do we really need ceil and floor ?
-		// for spreadsheets it can cause one pixel alignment offset btw grid and row/column header
-		// and a one pixel horizontal auto-scrolling issue;
-		// both issues have been fixed by rounding the projection: see Map.project above;
-		// anyway in case of similar problems, this code needs to be checked
-	},
-
 	_limitZoom: function (zoom) {
 		var min = this.getMinZoom(),
 		    max = this.getMaxZoom();

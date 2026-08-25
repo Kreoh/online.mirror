@@ -124,7 +124,7 @@ class AboutDialog {
 			productName =
 				typeof brandProductName === 'string' && brandProductName.length > 0
 					? brandProductName
-					: 'Collabora Online Development Edition (unbranded)';
+					: 'Online Office';
 		}
 
 		const productNameElement = content.querySelector(
@@ -141,12 +141,10 @@ class AboutDialog {
 
 		// Version
 		elements.coolwsdVersion.textContent = info.coolwsdVersion;
-		this.appendSpanAndLink(
-			elements.coolwsdVersion,
-			' git hash:\xA0',
-			`https://gerrit.collaboraoffice.com/plugins/gitiles/online/+log/${info.coolwsdHash}`,
-			info.coolwsdHash,
-			info.wsdOptions,
+		elements.coolwsdVersion.append(
+			document.createTextNode(
+				` git hash:\xA0${info.coolwsdHash}${info.wsdOptions ? `\xA0${info.wsdOptions}` : ''}`,
+			),
 		);
 
 		// Served By and Server ID

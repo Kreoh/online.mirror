@@ -568,15 +568,6 @@ public:
     }
 
     /**
-      Append the contents of an OUStringBuffer to this string.
-
-      @param    str         an OUStringBuffer.
-
-      @exception std::bad_alloc is thrown if an out-of-memory condition occurs
-    */
-    inline OUString & operator+=( const OUStringBuffer & str ) &;
-
-    /**
       Append a string to this string.
 
       @param    str         an OUString.
@@ -585,7 +576,15 @@ public:
     */
     OUString & operator+=( const OUString & str ) &
     {
-        return internalAppend(str.pData);
+        rtl_uString* pNewData = nullptr;
+        rtl_uString_newConcat(&pNewData, pData, str.pData);
+        if (!pNewData)
+        {
+            throw std::bad_alloc();
+        }
+        rtl_uString_assign(&pData, pNewData);
+        rtl_uString_release(pNewData);
+        return *this;
     }
     void operator+=(OUString const &) && = delete;
 
@@ -1638,9 +1637,6 @@ public:
     friend bool     operator == ( const OUString& rStr1,    const OUString& rStr2 )
                         { return rStr1.equals(rStr2); }
 
-    friend bool     operator != ( const OUString& rStr1,        const OUString& rStr2 )
-                        { return !(operator == ( rStr1, rStr2 )); }
-
     friend bool     operator <  ( const OUString& rStr1,    const OUString& rStr2 )
                         { return rStr1.compareTo( rStr2 ) < 0; }
     friend bool     operator >  ( const OUString& rStr1,    const OUString& rStr2 )
@@ -1676,20 +1672,6 @@ public:
             == 0;
     }
 
-    template<typename T> friend typename libreoffice_internal::CharPtrDetector<T, bool>::TypeUtf16
-    operator !=(OUString const & s1, T const & s2) { return !(s1 == s2); }
-
-    template<typename T>
-    friend typename libreoffice_internal::NonConstCharArrayDetector<T, bool>::TypeUtf16
-    operator !=(OUString const & s1, T & s2) { return !(s1 == s2); }
-
-    template<typename T> friend typename libreoffice_internal::CharPtrDetector<T, bool>::TypeUtf16
-    operator !=(T const & s1, OUString const & s2) { return !(s1 == s2); }
-
-    template<typename T>
-    friend typename libreoffice_internal::NonConstCharArrayDetector<T, bool>::TypeUtf16
-    operator !=(T & s1, OUString const & s2) { return !(s1 == s2); }
-
     /**
      * Compare string to an ASCII string literal.
      *
@@ -1718,34 +1700,6 @@ public:
             libreoffice_internal::ConstCharArrayDetector<T>::toPointer(literal),
             libreoffice_internal::ConstCharArrayDetector<T>::length);
     }
-    /**
-     * Compare string to an ASCII string literal.
-     *
-     * This operator is equal to calling !equalsAsciiL().
-     */
-    template< typename T >
-    friend typename libreoffice_internal::ConstCharArrayDetector< T, bool >::Type operator!=( const OUString& rString, T& literal )
-    {
-        assert(
-            libreoffice_internal::ConstCharArrayDetector<T>::isValid(literal));
-        return !rString.equalsAsciiL(
-            libreoffice_internal::ConstCharArrayDetector<T>::toPointer(literal),
-            libreoffice_internal::ConstCharArrayDetector<T>::length);
-    }
-    /**
-     * Compare string to an ASCII string literal.
-     *
-     * This operator is equal to calling !equalsAsciiL().
-     */
-    template< typename T >
-    friend typename libreoffice_internal::ConstCharArrayDetector< T, bool >::Type operator!=( T& literal, const OUString& rString )
-    {
-        assert(
-            libreoffice_internal::ConstCharArrayDetector<T>::isValid(literal));
-        return !rString.equalsAsciiL(
-            libreoffice_internal::ConstCharArrayDetector<T>::toPointer(literal),
-            libreoffice_internal::ConstCharArrayDetector<T>::length);
-    }
 
     /** @overload */
     template<typename T> friend typename libreoffice_internal::ConstCharArrayDetector<T, bool>::TypeUtf16
@@ -1768,28 +1722,6 @@ public:
                 libreoffice_internal::ConstCharArrayDetector<T>::length,
                 string.pData->buffer, string.pData->length)
             == 0;
-    }
-    /** @overload */
-    template<typename T> friend typename libreoffice_internal::ConstCharArrayDetector<T, bool>::TypeUtf16
-    operator !=(OUString const & string, T & literal) {
-        return
-            rtl_ustr_reverseCompare_WithLength(
-                string.pData->buffer, string.pData->length,
-                libreoffice_internal::ConstCharArrayDetector<T>::toPointer(
-                    literal),
-                libreoffice_internal::ConstCharArrayDetector<T>::length)
-            != 0;
-    }
-    /** @overload */
-    template<typename T> friend typename libreoffice_internal::ConstCharArrayDetector<T, bool>::TypeUtf16
-    operator !=(T & literal, OUString const & string) {
-        return
-            rtl_ustr_reverseCompare_WithLength(
-                libreoffice_internal::ConstCharArrayDetector<T>::toPointer(
-                    literal),
-                libreoffice_internal::ConstCharArrayDetector<T>::length,
-                string.pData->buffer, string.pData->length)
-            != 0;
     }
 
     /**
@@ -2882,18 +2814,6 @@ public:
     Concat(T (& value)[N]) { return OUStringConcat<OUStringConcatMarker, T[N]>(value); }
 
 private:
-    OUString & internalAppend( rtl_uString* pOtherData )
-    {
-        rtl_uString* pNewData = NULL;
-        rtl_uString_newConcat( &pNewData, pData, pOtherData );
-        if (pNewData == NULL) {
-            throw std::bad_alloc();
-        }
-        rtl_uString_assign(&pData, pNewData);
-        rtl_uString_release(pNewData);
-        return *this;
-    }
-
     static constexpr auto empty = OUStringLiteral(u""); // [-loplugin:ostr]
 };
 
@@ -2904,18 +2824,12 @@ private:
 //
 void operator ==(OUString const &, std::nullptr_t) = delete;
 void operator ==(std::nullptr_t, OUString const &) = delete;
-void operator !=(OUString const &, std::nullptr_t) = delete;
-void operator !=(std::nullptr_t, OUString const &) = delete;
 
 #if !defined RTL_STRING_UNITTEST
 inline bool operator ==(OUString const & lhs, StringConcatenation<char16_t> const & rhs)
 { return lhs == std::u16string_view(rhs); }
-inline bool operator !=(OUString const & lhs, StringConcatenation<char16_t> const & rhs)
-{ return lhs != std::u16string_view(rhs); }
 inline bool operator ==(StringConcatenation<char16_t> const & lhs, OUString const & rhs)
 { return std::u16string_view(lhs) == rhs; }
-inline bool operator !=(StringConcatenation<char16_t> const & lhs, OUString const & rhs)
-{ return std::u16string_view(lhs) != rhs; }
 #endif
 
 template<>

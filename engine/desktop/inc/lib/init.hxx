@@ -338,7 +338,7 @@ namespace desktop {
                            const int nCanvasWidth, const int nCanvasHeight, const int nTilePosX,
                            const int nTilePosY, const int nTileWidth, const int nTileHeight,
                            bool bIsPreview = false) override;
-        bool getViewIds(int* pArray, size_t nSize) override;
+        bool getViewIds(std::vector<int>& rIds) override;
         void setOutlineState(bool bColumn, int nLevel, int nIndex, bool bHidden) override;
         void paintWindow(unsigned nWindowId, unsigned char* pBuffer, const int x, const int y,
                          const int width, const int height) override;
@@ -464,6 +464,10 @@ namespace desktop {
         void registerFileSaveDialogCallback(COKitFileSaveDialogCallback pCallback) override;
         void executeScript(char const * script, std::string_view source, int line,
                            char ** result, char ** error,
+                           std::function<void(
+                               void * data, std::string_view level, std::string_view message)>
+                               consoleCallback,
+                           void * consoleCallbackData,
                            void (*proxyCallback) (void * data, char const * payload),
                            void * proxyCallbackData, bool * usedLegacyUnoApi) override;
         void deliverProxyResult(char const * callId, char const * jsonValue) override;

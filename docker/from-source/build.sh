@@ -6,31 +6,27 @@
 # -- Available env vars --
 # * DOCKER_HUB_REPO - which Docker Hub repo to use
 # * DOCKER_HUB_TAG  - exact revision-specific Docker Hub tag to create
-# * COLLABORA_ONLINE_REPO - which git repo to clone the online monorepo from
-# * COLLABORA_ONLINE_BRANCH - which branch to build
-# * COLLABORA_SOURCE_REVISION - exact full Kreoh source revision to build
-# * COLLABORA_SOURCE_BUILD_HOST_OS - explicit runtime Dockerfile route, Debian or Ubuntu
-# * COLLABORA_SOURCE_CACHE_DIR - persistent build cache root
-# * COLLABORA_FINAL_DOCKER_NO_CACHE - if true, build the final Docker image without cache
+# * ONLINE_OFFICE_SOURCE_REPOSITORY - which Git repository to clone
+# * ONLINE_OFFICE_SOURCE_BRANCH - which branch to build
+# * ONLINE_OFFICE_SOURCE_REVISION - exact full Kreoh source revision to build
+# * ONLINE_OFFICE_SOURCE_BUILD_HOST_OS - explicit runtime Dockerfile route, Debian or Ubuntu
+# * ONLINE_OFFICE_SOURCE_CACHE_DIR - persistent build cache root
+# * ONLINE_OFFICE_FINAL_DOCKER_NO_CACHE - if true, build the final Docker image without cache
 # * ENGINE_BUILD_TARGET - which make target to run for the engine (when building from source)
 # * ONLINE_EXTRA_BUILD_OPTIONS - extra build options for online
 # * NO_DOCKER_IMAGE - if set, don't build the docker image itself, just do all the preps
 
 # Check env variables
 if [ -z "$DOCKER_HUB_REPO" ]; then
-  DOCKER_HUB_REPO="mydomain/collaboraonline"
+  DOCKER_HUB_REPO="mydomain/online-office"
 fi;
 
-if [[ ! "${COLLABORA_SOURCE_REVISION:-}" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "COLLABORA_SOURCE_REVISION must be an explicit full lower-case Git revision." >&2
-  exit 1
-fi
-if [ -n "${COLLABORA_ONLINE_REVISION:-}" ]; then
-  echo "COLLABORA_ONLINE_REVISION is unsupported: use COLLABORA_SOURCE_REVISION." >&2
+if [[ ! "${ONLINE_OFFICE_SOURCE_REVISION:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "ONLINE_OFFICE_SOURCE_REVISION must be an explicit full lower-case Git revision." >&2
   exit 1
 fi
 
-EXPECTED_DOCKER_HUB_TAG="26.04.4.0-agent-save-${COLLABORA_SOURCE_REVISION:0:12}"
+EXPECTED_DOCKER_HUB_TAG="26.04.4.0-agent-save-${ONLINE_OFFICE_SOURCE_REVISION:0:12}"
 if [ -z "${DOCKER_HUB_TAG:-}" ]; then
   DOCKER_HUB_TAG="$EXPECTED_DOCKER_HUB_TAG"
 fi;
@@ -40,21 +36,21 @@ if [ "$DOCKER_HUB_TAG" != "$EXPECTED_DOCKER_HUB_TAG" ]; then
 fi
 echo "Using Docker Hub Repository: '$DOCKER_HUB_REPO' with tag '$DOCKER_HUB_TAG'."
 
-if [ -n "${COLLABORA_ONLINE_REPO:-}" ] && [ "$COLLABORA_ONLINE_REPO" != "https://github.com/Kreoh/online.mirror.git" ]; then
-  echo "COLLABORA_ONLINE_REPO must be https://github.com/Kreoh/online.mirror.git" >&2
+if [ -n "${ONLINE_OFFICE_SOURCE_REPOSITORY:-}" ] && [ "$ONLINE_OFFICE_SOURCE_REPOSITORY" != "https://github.com/Kreoh/online.mirror.git" ]; then
+  echo "ONLINE_OFFICE_SOURCE_REPOSITORY must be https://github.com/Kreoh/online.mirror.git" >&2
   exit 1
 fi
-if [ -z "$COLLABORA_ONLINE_REPO" ]; then
-  COLLABORA_ONLINE_REPO="https://github.com/Kreoh/online.mirror.git"
+if [ -z "${ONLINE_OFFICE_SOURCE_REPOSITORY:-}" ]; then
+  ONLINE_OFFICE_SOURCE_REPOSITORY="https://github.com/Kreoh/online.mirror.git"
 fi;
-if [ -n "${COLLABORA_ONLINE_BRANCH:-}" ] && [ "$COLLABORA_ONLINE_BRANCH" != "kreoh-main-agent-port" ]; then
-  echo "COLLABORA_ONLINE_BRANCH must be kreoh-main-agent-port" >&2
+if [ -n "${ONLINE_OFFICE_SOURCE_BRANCH:-}" ] && [ "$ONLINE_OFFICE_SOURCE_BRANCH" != "kreoh-main-agent-port" ]; then
+  echo "ONLINE_OFFICE_SOURCE_BRANCH must be kreoh-main-agent-port" >&2
   exit 1
 fi
-if [ -z "${COLLABORA_ONLINE_BRANCH:-}" ]; then
-  COLLABORA_ONLINE_BRANCH="kreoh-main-agent-port"
+if [ -z "${ONLINE_OFFICE_SOURCE_BRANCH:-}" ]; then
+  ONLINE_OFFICE_SOURCE_BRANCH="kreoh-main-agent-port"
 fi;
-echo "Building exact revision '$COLLABORA_SOURCE_REVISION' from '$COLLABORA_ONLINE_REPO'"
+echo "Building exact revision '$ONLINE_OFFICE_SOURCE_REVISION' from '$ONLINE_OFFICE_SOURCE_REPOSITORY'"
 
 if [ -n "${ENGINE_ASSETS:-}" ]; then
   echo "ENGINE_ASSETS is prohibited: build the document engine from Kreoh source." >&2
@@ -70,15 +66,15 @@ echo "Engine build target: '$ENGINE_BUILD_TARGET'"
 
 SRCDIR=$(realpath `dirname $0`)
 INSTDIR="$SRCDIR/instdir"
-CACHE_ROOT="${COLLABORA_SOURCE_CACHE_DIR:-${HOME:-$SRCDIR}/.cache/collabora-source-builder}"
+CACHE_ROOT="${ONLINE_OFFICE_SOURCE_CACHE_DIR:-${HOME:-$SRCDIR}/.cache/online-office-source-builder}"
 
-if [ -n "${COLLABORA_SOURCE_BUILD_HOST_OS:-}" ]; then
-  HOST_OS="$COLLABORA_SOURCE_BUILD_HOST_OS"
+if [ -n "${ONLINE_OFFICE_SOURCE_BUILD_HOST_OS:-}" ]; then
+  HOST_OS="$ONLINE_OFFICE_SOURCE_BUILD_HOST_OS"
 else
   HOST_OS=$(lsb_release -si 2>/dev/null || true)
 fi
 if [ "$HOST_OS" != "Debian" ] && [ "$HOST_OS" != "Ubuntu" ]; then
-  echo "Unsupported source-build host '$HOST_OS': set COLLABORA_SOURCE_BUILD_HOST_OS to Debian or Ubuntu." >&2
+  echo "Unsupported source-build host '$HOST_OS': set ONLINE_OFFICE_SOURCE_BUILD_HOST_OS to Debian or Ubuntu." >&2
   exit 1
 fi
 BUILDDIR="$CACHE_ROOT/builddir"
@@ -100,21 +96,24 @@ mkdir -p "$INSTDIR"
 
 # Clone the online monorepo (engine/ contains the rendering engine)
 if test ! -d online ; then
-  git clone --depth=1 --branch "$COLLABORA_ONLINE_BRANCH" "$COLLABORA_ONLINE_REPO" online || exit 1
+  git clone --depth=1 --branch "$ONLINE_OFFICE_SOURCE_BRANCH" "$ONLINE_OFFICE_SOURCE_REPOSITORY" online || exit 1
 fi
 
 (
   cd online &&
-  test "$(git config --get remote.origin.url)" = "$COLLABORA_ONLINE_REPO" &&
+  test "$(git config --get remote.origin.url)" = "$ONLINE_OFFICE_SOURCE_REPOSITORY" &&
   git fetch --depth=1 --force origin \
-    "+refs/heads/$COLLABORA_ONLINE_BRANCH:refs/remotes/origin/$COLLABORA_ONLINE_BRANCH" &&
-  git cat-file -e "$COLLABORA_SOURCE_REVISION^{commit}" &&
-  git merge-base --is-ancestor "$COLLABORA_SOURCE_REVISION" \
-    "refs/remotes/origin/$COLLABORA_ONLINE_BRANCH" &&
-  git checkout --detach -f "$COLLABORA_SOURCE_REVISION" &&
+    "+refs/heads/$ONLINE_OFFICE_SOURCE_BRANCH:refs/remotes/origin/$ONLINE_OFFICE_SOURCE_BRANCH" &&
+  git cat-file -e "$ONLINE_OFFICE_SOURCE_REVISION^{commit}" &&
+  git merge-base --is-ancestor "$ONLINE_OFFICE_SOURCE_REVISION" \
+    "refs/remotes/origin/$ONLINE_OFFICE_SOURCE_BRANCH" &&
+  git checkout --detach -f "$ONLINE_OFFICE_SOURCE_REVISION" &&
   git clean -f -d &&
-  test "$(git rev-parse HEAD)" = "$COLLABORA_SOURCE_REVISION"
+  test "$(git rev-parse HEAD)" = "$ONLINE_OFFICE_SOURCE_REVISION"
 ) || exit 1
+
+python3 "$SRCDIR/debrand.py" source "$BUILDDIR/online" || exit 1
+python3 "$SRCDIR/debrand.py" scan-source "$BUILDDIR/online" || exit 1
 
 bash "$SRCDIR/check-builder.sh" "$BUILDDIR/online/configure.ac" || exit 1
 ( cd online && ./autogen.sh ) || exit 1
@@ -137,18 +136,20 @@ cp -a online/engine/instdir "$INSTDIR"/opt/online-office
 # copy stuff
 ( cd online && DESTDIR="$INSTDIR" make install ) || exit 1
 
+python3 "$SRCDIR/debrand.py" rootfs "$INSTDIR" "$BUILDDIR/online" || exit 1
 
 # Create new docker image
 if [ -z "$NO_DOCKER_IMAGE" ]; then
   cd "$SRCDIR"
   docker_build_args=(
-    --build-arg "COLLABORA_SOURCE_REVISION=$COLLABORA_SOURCE_REVISION" \
+    --build-arg "ONLINE_OFFICE_SOURCE_REVISION=$ONLINE_OFFICE_SOURCE_REVISION" \
     -t "$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" -f "$HOST_OS"
   )
-  case "${COLLABORA_FINAL_DOCKER_NO_CACHE:-}" in
+  case "${ONLINE_OFFICE_FINAL_DOCKER_NO_CACHE:-}" in
     1|true|TRUE|yes|YES) docker_build_args=(--no-cache "${docker_build_args[@]}") ;;
   esac
   docker build "${docker_build_args[@]}" . || exit 1
+  python3 "$SRCDIR/debrand.py" scan-image "$DOCKER_HUB_REPO:$DOCKER_HUB_TAG" || exit 1
 else
   echo "Skipping docker image build"
 fi;

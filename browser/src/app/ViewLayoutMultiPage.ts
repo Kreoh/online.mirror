@@ -9,7 +9,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-class ViewLayoutMultiPage extends ViewLayoutNewBase {
+class ViewLayoutMultiPage extends ViewLayoutBase {
 	public readonly type: string = 'ViewLayoutMultiPage';
 	public gapBetweenPages = 20; // Core pixels.
 	private maxRowsSize = 2;
@@ -19,10 +19,19 @@ class ViewLayoutMultiPage extends ViewLayoutNewBase {
 	constructor() {
 		super();
 
-		app.events.on('resize', this.reset.bind(this));
-		app.map.on('zoomend', this.reset.bind(this));
+		app.map.on('zoomend', this.reset, this);
 
 		this.adjustViewZoomLevel();
+		this.reset();
+	}
+
+	public override dispose(): void {
+		app.map.off('zoomend', this.reset, this);
+		super.dispose();
+	}
+
+	public override onResize(): void {
+		super.onResize();
 		this.reset();
 	}
 
@@ -38,12 +47,12 @@ class ViewLayoutMultiPage extends ViewLayoutNewBase {
 		const halfWidth = Math.round(anchorSection.size[0] * 0.5);
 
 		const ratio = halfWidth / app.activeDocument.fileSize.pX;
-		let zoom = app.map.getScaleZoom(ratio);
+		let zoom = app.activeDocument.getScaleZoom(ratio);
 		zoom = Math.min(max, Math.max(min, zoom));
 
 		if (zoom > 1) zoom = Math.floor(zoom);
 
-		app.map.setZoom(zoom, { animate: false });
+		this.applyZoom(zoom);
 	}
 
 	private resetViewLayout() {
@@ -124,6 +133,15 @@ class ViewLayoutMultiPage extends ViewLayoutNewBase {
 		}
 
 		this._viewSize.pY = Math.max(lastY, canvasSize[1]);
+
+		// Capture the comment-free page-layout extent. Comment overflow is applied
+		// on top via ensureViewSizeCoversComments; side-space math reads this base
+		// so it does not feed back into the comment width computation.
+		this._baseViewSize = this._viewSize.clone();
+	}
+
+	protected override getBaseViewSize(): cool.SimplePoint {
+		return this._baseViewSize;
 	}
 
 	// Get the page rectangle or its corresponding view rectangle which contains the given point (document point or view point).
@@ -304,22 +322,6 @@ class ViewLayoutMultiPage extends ViewLayoutNewBase {
 		return result;
 	}
 
-	public override scroll(
-		pX: number,
-		pY: number,
-		userIsScrolling: boolean = false,
-	): boolean {
-		if (userIsScrolling) this.unselectCommentOnScroll();
-		const scrolled = super.scroll(pX, pY, userIsScrolling);
-
-		if (scrolled) {
-			this.updateViewData();
-			app.sectionContainer.requestReDraw();
-		}
-
-		return scrolled;
-	}
-
 	public override scrollTo(
 		pX: number,
 		pY: number,
@@ -393,7 +395,9 @@ class ViewLayoutMultiPage extends ViewLayoutNewBase {
 		}, 100000);
 		const width = maxX - minX;
 
-		const sideSpace = this.viewSize.pX - width;
+		// Base extent (no comment overflow) so the comment width decision stays
+		// stable across relayouts instead of feeding back through viewSize.
+		const sideSpace = this._baseViewSize.pX - width;
 
 		return sideSpace;
 	}

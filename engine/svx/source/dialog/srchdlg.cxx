@@ -1992,8 +1992,6 @@ IMPL_LINK_NOARG(SvxSearchDialog, FormatHdl_Impl, weld::Button&, void)
     SfxItemPool& rPool = pSh->GetPool();
     SfxItemSet aSet(rPool, m_pImpl->pRanges);
 
-    aSet.MergeRange(SID_ATTR_PARA_MODEL, SID_ATTR_PARA_MODEL);
-
     sal_uInt16 nBrushWhich = pSh->GetPool().GetWhichIDFromSlotID(SID_ATTR_BRUSH);
     aSet.MergeRange(nBrushWhich, nBrushWhich);
 
@@ -2020,7 +2018,6 @@ IMPL_LINK_NOARG(SvxSearchDialog, FormatHdl_Impl, weld::Button&, void)
         aTxt = SvxResId( RID_SVXSTR_REPLACE );
         m_pReplaceList->Get(aSet);
     }
-    aSet.DisableItem(SID_ATTR_PARA_MODEL);
     aSet.DisableItem(rPool.GetWhichIDFromSlotID(SID_ATTR_PARA_PAGEBREAK));
     aSet.DisableItem(rPool.GetWhichIDFromSlotID(SID_ATTR_PARA_KEEP));
 
@@ -2362,7 +2359,14 @@ void SvxSearchDialog::SaveToModule_Impl()
 }
 
 void SvxSearchDialog::executeSubDialog(VclPtr<VclAbstractDialog> dialog, const std::function<void(sal_Int32)>& func) {
-    assert(!m_executingSubDialog);
+    // Only one sub-dialog runs at a time. A JSDialog client delivers button clicks to this
+    // dialog even while a modal sub-dialog is open, so a request that arrives while one is
+    // already running is ignored. The unused dialog is disposed right away.
+    if (m_executingSubDialog)
+    {
+        dialog->disposeOnce();
+        return;
+    }
     m_executingSubDialog = true;
 
     dialog->StartExecuteAsync([dialog, func, this](sal_Int32 nResult) {

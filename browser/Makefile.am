@@ -363,7 +363,7 @@ COOL_JS_LST =\
 	src/app/ImpressSelectionMiddleware.ts \
 	src/app/OverviewFade.ts \
 	src/app/ViewLayout.ts \
-	src/app/ViewLayoutNewBase.ts \
+	src/app/ViewLayoutImpress.ts \
 	src/app/ViewLayoutWriter.ts \
 	src/app/ViewLayoutCalc.ts \
 	src/app/ViewLayoutMultiPage.ts \
@@ -428,6 +428,8 @@ COOL_JS_LST =\
 	src/canvas/sections/HTMLObjectSection.ts \
 	src/canvas/sections/AnimatedGifSection.ts \
 	src/canvas/sections/RulerSpacerSection.ts \
+	src/canvas/sections/SpacerSection.ts \
+	src/canvas/sections/ZoomControl.ts \
 	src/canvas/sections/CompareChangesLabelSection.ts \
 	src/canvas/sections/CommentMarkerSubSection.ts \
 	src/canvas/sections/CommentAnchorAreaSubSection.ts \
@@ -547,7 +549,6 @@ COOL_JS_LST =\
 	src/dom/CompactViewAccessibility.ts \
 	src/dom/NotebookbarAccessibilityDefinitions.js \
 	src/dom/NotebookbarAccessibility.js \
-	src/map/handler/Map.Scroll.js \
 	src/dom/DomEvent.Pointer.js \
 	src/map/handler/Map.Keyboard.js \
 	src/map/handler/Map.KeyboardShortcuts.ts \
@@ -1086,17 +1087,22 @@ if APP_HAS_BRANDING
 	@if test -d "$(APP_BRANDING_DIR)" ; then cp -a "$(APP_BRANDING_DIR)"/branding* $(DIST_FOLDER)/ ; fi
 	@if test -d "$(APP_BRANDING_DIR)" ; then cp -a "$(APP_BRANDING_DIR)"/images/*.svg $(DIST_FOLDER)/images/ ; fi
 	@if test -d "$(APP_BRANDING_DIR)" ; then cp -a "$(APP_BRANDING_DIR)/images/toolbar-bg-logo.svg" $(DIST_FOLDER)/images/toolbar-bg.svg ; fi
-if ENABLE_MACOS
-	@if test -d "$(APP_BRANDING_DIR)/welcome" ; then cp -a "$(APP_BRANDING_DIR)/welcome" "$(DIST_FOLDER)/" ; fi
-endif
+	@if test "$(ENABLE_QTAPP)" = true || test "$(ENABLE_MACOSAPP)" = true || test "$(ENABLE_WINDOWSAPP)" = true ; then \
+		if test -d "$(APP_BRANDING_DIR)/welcome" ; then cp -a "$(APP_BRANDING_DIR)/welcome" "$(DIST_FOLDER)/" ; fi ; \
+	fi
 	@echo
 	@echo "JS, HTML and CSS has been updated ($(DIST_FOLDER))."
 endif
+# The placeholder welcome slideshow is a developer aid. Debug builds bundle it so the welcome
+# flow can be exercised. Release builds bundle a welcome slideshow only when the app branding
+# provides one, and the app shells show no welcome window when the file is absent.
+if ENABLE_DEBUG
 	@if test "$(ENABLE_QTAPP)" = true || test "$(ENABLE_MACOSAPP)" = true || test "$(ENABLE_WINDOWSAPP)" = true ; then \
 		mkdir -p $(DIST_FOLDER)/welcome && \
 		test -f $(DIST_FOLDER)/welcome/welcome-slideshow.odp || cp $(srcdir)/welcome/welcome-slideshow.odp $(DIST_FOLDER)/welcome/welcome-slideshow.odp ; \
 		test -f $(DIST_FOLDER)/welcome/welcome.svg || cp $(srcdir)/welcome/welcome.svg $(DIST_FOLDER)/welcome/welcome.svg ; \
 	fi
+endif
 	@if test "$(ENABLE_QTAPP)" = true || test "$(ENABLE_MACOSAPP)" = true || test "$(ENABLE_WINDOWSAPP)" = true ; then \
 		echo "Generating localized introductory documents"; \
 		mkdir -p $(DIST_FOLDER)/introdocs/preview ; \
@@ -1460,6 +1466,7 @@ else
 EXCLUDES = \
         --exclude='src' \
         --exclude='debug.html' \
+        --exclude='documents.html' \
         --exclude='framed.doc.html' \
         --exclude='framed.html' \
         --exclude='load.doc.html' \
@@ -1672,6 +1679,7 @@ clean-local:
 	@rm -rf $(DIST_FOLDER)
 	@rm -rf $(INTERMEDIATE_DIR)
 	@rm -rf $(TYPESCRIPT_JS_DIR)
+	@rm -rf $(ADMIN_TEMPLATE_FOLDER)
 	@rm -rf node_modules
 	@rm -f package-lock.json
 	@rm -f $(abs_srcdir)/jsconfig.json

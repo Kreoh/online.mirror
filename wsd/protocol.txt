@@ -121,10 +121,18 @@ aichatcancel: <requestId>
     Cancel an in-progress AI chat request. <requestId> is the identifier
     from the original 'aichat' message.
 
-executescript <callId> <script>
+executescript <callId> <startLine> <source>
+<script>
 
     Run <script> as a JavaScript snippet in the kit's JS UNO and reply via 'executescriptresult:'
-    tagged with the same <callId>.
+    tagged with the same <callId>.  <script> occupies everything after the first newline; the header
+    line carries only <callId>, <startLine> and <source>.
+
+    <startLine> (1-based) and <source> are the coordinates QuickJS attributes to any stack frame the
+    script produces, so an exception thrown from inside <script> at its own (1-based) line N reports
+    as <source>:<startLine>+N-1:<column>.  <source> is typically the URL of the .js file the caller
+    took the code from; <startLine> compensates for any lines the caller prepends before <script>
+    (e.g. cool.callRemote wraps the function's own source in an outer expression).
 
     Used by the iframe-extension framework (browser/extensions/cool.js's cool.callRemote helper) to
     call into the kit from extension iframes.  <callId> is an opaque string the client picks for
@@ -182,6 +190,35 @@ load [part=<partNumber>] url=<url> [timestamp=<time>] [lang=<locale>] [deviceFor
     timestamp is in tzfile(5) format. For example: Pacific/Auckland.
 
     options are the whole rest of the line, not URL-encoded, and must be valid JSON.
+
+editwithpassword password=<password>
+
+    Provides the password that allows editing a document that has a
+    separate password for modifying. Such a document loads in
+    read-only mode, and every view stays read-only until it has sent
+    the correct password with this message. Only the view that sent
+    the password becomes editable: the other views stay read-only
+    until each of them sends the password itself.
+
+    <password> is URL-encoded, so it can contain spaces.
+
+    On success the server answers:
+
+        editwithpassword: success
+
+    and the view can switch to edit mode. On failure an error is
+    returned:
+
+    * kind=wrongpassword - the password did not match and the view
+      stays read-only.
+
+    * kind=notallowed - the view has no write permission, or the
+      document has no separate password for modifying.
+
+    * kind=syntax - the password parameter was missing or empty.
+
+    * kind=failed - the password matched, but the document could not
+      be reopened for editing. The view stays read-only.
 
 coolclient <major.minor[-patch]> [ <timestamp> <perfcounter> ]
 
@@ -597,7 +634,7 @@ lokitversion <JSON string>
     JSON string contains version information in format:
     {ProductName: <>, ProductVersion: <>, ProductExtension: <>, BuildId: <>}
 
-    Eg: {"ProductName": "Collabora Office",
+    Eg: {"ProductName": "Online Office",
          "ProductVersion": "26.04",
          "ProductExtension": ".0.0.alpha0",
          "BuildId": "<full 40 char git hash>"}
@@ -648,7 +685,7 @@ error: cmd=<command> kind=<kind> [code=<error_code>] [params=1,2,3,...,N]
     <kind> is some single-word classification
 
     <code> (when provided) further specifies the error as forwarded from
-    Collabora Office
+    Online Office
 
 close: <reason>
 
@@ -705,6 +742,19 @@ loaded: viewid=<viewId> views=<number of active views> isfirst=<true|false>
     <isfirst> "true" if this is the first view (i.e. the document has just loaded), otherwise "false".
 
     See also unloaded:.
+
+haspasswordtomodify: true
+
+    Sent after loading a document that has a separate password for
+    modifying, to every view that has not entered that password yet.
+    The view is read-only until it provides the password with an
+    editwithpassword message.
+
+editwithpassword: success
+
+    Sent to a view whose editwithpassword message carried the correct
+    password, after the document has become editable. The view can
+    switch to edit mode.
 
 pong rendercount=<num>
 
@@ -767,11 +817,26 @@ executescriptresult: <json>
 
     Reply to an 'executescript' message.  The JSON payload has the shape
 
-        { "id": <callId> [, "ok": <jsonValue>] [, "err": <string>] }
+        { "id": <callId> [, "ok": <jsonValue>] [, "err": <error>] [, "legacyUnoApi": true] }
 
     Exactly one of "ok" or "err" is set, except when the script's result value was something
     JSON.stringify drops (undefined, a function, a symbol), in which case neither key is present,
     which the client-side helper surfaces as a Promise resolving to JavaScript undefined.
+
+    "err" is either a plain string (for engine-level failures without structured context, e.g.
+    QuickJS not enabled in this build) or a structured object
+
+        { "message": <string>, "name": <string>, "stack": [<frame>, ...] }
+
+    where each <frame> is
+
+        { "source": <string>, "line": <string>, "column": <string>, "functionName": <string> }
+
+    naming the (1-based) JS coordinates QuickJS attributed to the throw site (i.e. relative to the
+    <startLine>/<source> that were passed on the corresponding 'executescript').
+
+    "legacyUnoApi" is present and true iff the script touched the legacy com.sun.star UNO API, used
+    by the client to flash a one-time deprecation snackbar.
 
 proxycall: <json>
 
@@ -783,6 +848,19 @@ proxycall: <json>
     "callId" is present iff the proxy stub is waiting for a synchronous return value via
     'proxyreturn' (i.e. the listener method has a non-void return type; for void return types the
     call is fire-and-forget).
+
+consolemsg <level>
+<message>
+
+    Notification that a script running under an 'executescript' called one of the WHATWG Console API
+    methods jsuno registers on the global `console` object: log, info, warn, error, debug, trace or
+    assert.  <level> is that method name; <message> occupies everything after the first newline and
+    is the stringified-and-space-joined args the script passed.  For "trace" and "assert" the JS
+    stack at the call site is appended to <message> (as extra "    at ..." lines); "warn" and
+    "error" carry the JS stack the same way, so that browser-side rendering of the message names the
+    kit-side call chain and not the client-side postMessage plumbing that delivered it.  "assert"
+    only fires when the assertion failed; the other methods fire on every call.  The client-side
+    helper routes each event to console[<level>] in the browser.
 
 tile: part=<partNumber> width=<width> height=<height> tileposx=<xpos> tileposy=<ypos> tilewidth=<tileWidth> tileheight=<tileHeight> [timestamp=<time>] [wid=<wireId>]
 <binaryPngImage>
@@ -890,11 +968,11 @@ wopi: <JSON>
 
      Properties mentioned:
      + PostMessageOrigin: See WOPI specs for more information
-     + HideSaveOption: (boolean): If Collabora Online should hide the save options
-     + HidePrintOption: (boolean): If Collabora Online should hide print options
-     + HideExportOption: (boolean): If Collabora Online should hide the export options
+     + HideSaveOption: (boolean): If Online Office should hide the save options
+     + HidePrintOption: (boolean): If Online Office should hide print options
+     + HideExportOption: (boolean): If Online Office should hide the export options
        this implies 'Download as' options in file menu
-     + HideRepairOption: (boolean): If Collabora Online should hide the Repair
+     + HideRepairOption: (boolean): If Online Office should hide the Repair
        undo functionality
 
 versionrestore: <action>
@@ -1358,9 +1436,9 @@ documents <pid> <filename> <number of views> <memory consumed> <elapsed time> <i
     Each set document attributes is separated by a newline.
 
 mem_consumed <memory>
-    Total memory being consumed by Collabora Online.
+    Total memory being consumed by Online Office.
 total_avail_mem <memory>
-    Total memory available to whole Collabora Online. This takes into account
+    Total memory available to Online Office. This takes into account
     the memproportion setting, if set by the user, when calculating the amount
     of memory available to the process.
 
@@ -1395,7 +1473,7 @@ lokitversion <JSON string>
     JSON string contains version information in format:
     {ProductName: <>, ProductVersion: <>, ProductExtension: <>, BuildId: <>}
 
-    Eg: {"ProductName": "Collabora Office",
+    Eg: {"ProductName": "Online Office",
          "ProductVersion": "26.04",
          "ProductExtension": ".0.0.alpha0",
          "BuildId": "<full 40 char git hash>"}

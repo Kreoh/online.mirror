@@ -30,7 +30,7 @@ L.ProgressOverlay = window.L.Layer.extend({
 		if (window.ThisIsAMobileApp) {
 			productName = window.MobileAppName;
 		} else {
-			productName = (typeof brandProductName !== 'undefined') ? brandProductName : 'Collabora Online Development Edition (unbranded)';
+			productName = (typeof brandProductName !== 'undefined') ? brandProductName : 'Online Office';
 		}
 		if (window.logoURL) {
 			this._spinner.style.setProperty(

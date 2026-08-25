@@ -125,8 +125,7 @@ export class TilesSection extends CanvasSectionObject {
 		var cropHeight = crop.max.y - crop.min.y;
 
 		if (cropWidth && cropHeight) {
-			if (clearBackground || this.containerObject.isZoomChanged() || canvasCtx !== this.context) {
-				// Whole canvas is not cleared after zoom has changed, so clear it per tile as they arrive.
+			if (clearBackground || canvasCtx !== this.context) {
 				canvasCtx.fillStyle = this.containerObject.getClearColor();
 				this.beforeDraw(canvasCtx);
 				canvasCtx.fillRect(
@@ -163,11 +162,10 @@ export class TilesSection extends CanvasSectionObject {
 	private paintSimple (tile: any, async: boolean): void {
 		const tilePos: cool.SimplePoint = tile.coords.getPosSimplePoint();
 
-		if ((async || this.containerObject.isZoomChanged()) && !app.file.fileBasedView) {
+		if (async && !app.file.fileBasedView) {
 			// Non Calc tiles(handled by paintSimple) can have transparent pixels,
 			// so clear before paint if the call is an async one.
 			// For the full view area repaint, whole canvas is cleared by section container.
-			// Whole canvas is not cleared after zoom has changed, so clear it per tile as they arrive even if not async.
 			this.context.fillStyle = this.containerObject.getClearColor();
 			this.context.fillRect(tilePos.vX, tilePos.vY, RenderManager.tileSize, RenderManager.tileSize);
 		}
@@ -242,7 +240,7 @@ export class TilesSection extends CanvasSectionObject {
 
 	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 	public paint (tile: any, ctx: any, async: boolean): void {
-		if (this.containerObject.isInZoomAnimation() || this.sectionProperties.tsManager.waitForTiles())
+		if (this.containerObject.isInZoomAnimation())
 			return;
 
 		if (!ctx)
@@ -289,25 +287,6 @@ export class TilesSection extends CanvasSectionObject {
 				}
 			}
 		}
-	}
-
-	// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-	public haveAllTilesInView(zoom?: number, part?: PartNumber, mode?: number, ctx?: any): boolean {
-		zoom = zoom || Math.round(this.map.getZoom());
-		part = part || this.sectionProperties.docLayer.getSelectedPart();
-		ctx = ctx || this.sectionProperties.tsManager._paintContext();
-
-		var allTilesFetched = true;
-		this.forEachTileInView(zoom, part, mode, ctx, function (tile: any): boolean {
-			// Ensure all tile are available.
-			if (!tile || tile.needsFetch()) {
-				allTilesFetched = false;
-				return false; // stop search.
-			}
-			return true; // continue checking remaining tiles.
-		});
-
-		return allTilesFetched;
 	}
 
 	private drawPageBackgroundWriter (ctx: any) {
@@ -613,20 +592,12 @@ export class TilesSection extends CanvasSectionObject {
 		var part = this.sectionProperties.docLayer.getSelectedPart();
 		var mode = app.activeDocument.activeModes[0];
 
-		if (this.sectionProperties.tsManager.waitForTiles()) {
-			if (!this.haveAllTilesInView(zoom, part, mode, ctx))
-				return;
-		} else if (!this.containerObject.isZoomChanged()) {
-			// Don't show page border and page numbers (drawn by drawPageBackgrounds) if zoom is changing
-			// after a zoom animation.
-
-			// drawPageBackgroundWriter uses absolute view coordinates (v1X, v1Y etc.)
-			// but the context is already translated by myTopLeft (by the section container).
-			// Compensate for this offset, same as the multipage view path.
-			this.context.translate(-this.myTopLeft[0], -this.myTopLeft[1]);
-			this.drawPageBackgrounds(ctx);
-			this.context.translate(this.myTopLeft[0], this.myTopLeft[1]);
-		}
+		// drawPageBackgroundWriter uses absolute view coordinates (v1X, v1Y etc.)
+		// but the context is already translated by myTopLeft (by the section container).
+		// Compensate for this offset, same as the multipage view path.
+		this.context.translate(-this.myTopLeft[0], -this.myTopLeft[1]);
+		this.drawPageBackgrounds(ctx);
+		this.context.translate(this.myTopLeft[0], this.myTopLeft[1]);
 
 		var doneTiles = new Set();
 		this.forEachTileInView(zoom, part, mode, ctx, function (tile: any, coords: TileCoordData): boolean {
@@ -721,9 +692,9 @@ export class TilesSection extends CanvasSectionObject {
 	private zoomLevelWithMaxContentInArea(area: any,
 		areaZoom: number, part: PartNumber, mode: number, ctx: any): number {
 
-		var frameScale = this.sectionProperties.tsManager._zoomFrameScale;
+		var frameScale = this.sectionProperties.tsManager.zoomFrameScale();
 		var docLayer = this.sectionProperties.docLayer;
-		var targetZoom = Math.round(this.map.getScaleZoom(frameScale, areaZoom));
+		var targetZoom = Math.round(app.activeDocument.getScaleZoom(frameScale, areaZoom));
 		var bestZoomLevel = targetZoom;
 		var availAreaScoreAtBestZL = -Infinity; // Higher the better.
 		var area = area.clone();
@@ -745,7 +716,7 @@ export class TilesSection extends CanvasSectionObject {
 			// Compute area for zoom-level 'zoom'.
 			var areaAtZoom = this.scaleBoundsForZoom(area, zoom, areaZoom);
 			//console.log('DEBUG:: areaAtZoom = ' + areaAtZoom);
-			var relScale = this.map.getZoomScale(zoom, areaZoom);
+			var relScale = app.activeDocument.getZoomScale(zoom, areaZoom);
 
 			this.forEachTileInArea(areaAtZoom, zoom, part, mode, ctx, function(tile, coords, section) {
 				if (tile && tile.image) {
@@ -938,7 +909,10 @@ export class TilesSection extends CanvasSectionObject {
 		if (!tsManager._inZoomAnim)
 			return;
 
-		var scale = tsManager._zoomFrameScale;
+		// The zoom-frame scale is owned by ZoomControl for Calc (published via the
+		// tiles section) and by the painter otherwise; zoomFrameScale() picks the
+		// right source.
+		var scale = tsManager.zoomFrameScale();
 		if (!scale || !tsManager._newCenter)
 			return;
 
@@ -1039,7 +1013,7 @@ export class TilesSection extends CanvasSectionObject {
 
 			var docRangeScaled = (bestZoomSrc == zoom) ? docRange : this.scaleBoundsForZoom(docRange, bestZoomSrc, zoom);
 			var destPosScaled = (bestZoomSrc == zoom) ? destPos : this.scalePosForZoom(destPos, bestZoomSrc, zoom);
-			var relScale = (bestZoomSrc == zoom) ? 1 : this.map.getZoomScale(bestZoomSrc, zoom);
+			var relScale = (bestZoomSrc == zoom) ? 1 : app.activeDocument.getZoomScale(bestZoomSrc, zoom);
 
 			this.beforeDraw(canvasContext);
 			this.forEachTileInArea(docRangeScaled, bestZoomSrc, part, mode, ctx, function (tile, coords, section): boolean {
@@ -1118,7 +1092,7 @@ export class TilesSection extends CanvasSectionObject {
 
 	private scalePosForZoom(pos: any, toZoom: number, fromZoom: number): any {
 		var docLayer = this.sectionProperties.docLayer;
-		var convScale = this.map.getZoomScale(toZoom, fromZoom);
+		var convScale = app.activeDocument.getZoomScale(toZoom, fromZoom);
 
 		if (docLayer.sheetGeometry) {
 			var toScale = convScale * RenderManager.tileSize * 15.0 / app.tile.size.x;
@@ -1132,7 +1106,7 @@ export class TilesSection extends CanvasSectionObject {
 
 	private scaleBoundsForZoom(corePxBounds: any, toZoom: number, fromZoom: number) {
 		var docLayer = this.sectionProperties.docLayer;
-		var convScale = this.map.getZoomScale(toZoom, fromZoom);
+		var convScale = app.activeDocument.getZoomScale(toZoom, fromZoom);
 
 		if (docLayer.sheetGeometry) {
 

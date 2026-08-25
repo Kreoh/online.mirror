@@ -1,0 +1,35 @@
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
+/*
+ * Copyright the Collabora Office contributors.
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+module scriptinterop {
+
+// Forward declaration: appendParagraph returns a paragraph, and the paragraph's getRange returns
+// a range, so the two interfaces refer to each other.
+interface XTextParagraph;
+
+interface XTextRange : XBase
+{
+    string asString();
+
+    XTextRange setText([in] string newText);
+
+    XTextRange appendText([in] string text);
+
+    XTextParagraph appendParagraph([in] string text);
+
+    XTextRange setBulletLevel([in] long level);
+
+    XTextStyle getTextStyle();
+};
+
+};
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

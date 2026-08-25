@@ -37,7 +37,7 @@ m4_dnl------------------------------------------------------------------------
       [<script>(function () { var l = new URLSearchParams(window.location.search).get('lang'); window.LANG = (l && l !== 'undefined') ? l : 'en-US'; })();</script>
       <script src="l10n-settings.js"></script>],
       [<link rel="localizations" href="%SERVICE_ROOT%/browser/%VERSION%/l10n/localizations.json" type="application/vnd.oftn.l10n+json"/>])
-    <title>Collabora Online - Settings</title>
+    <title>Online Office - Settings</title>
     <link
       rel="StyleSheet"
       href="m4_ifelse(MOBILEAPP, [], [%SERVICE_ROOT%/browser/%VERSION%/])admin/css/admin.css"
@@ -81,6 +81,8 @@ m4_dnl------------------------------------------------------------------------
         data-lang="%UI_LANG%"
         data-disable-ai-settings="%DISABLE_AI_SETTINGS%"
         data-show-left-nav="%SHOW_LEFT_NAV%"
+        data-smart-zoom="%SMART_ZOOM%"
+        data-default-zoom="%DEFAULT_ZOOM%"
       />
     </div>
   </body>

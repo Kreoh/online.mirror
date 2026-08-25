@@ -64,6 +64,6 @@ update_versions(lib_versions)
 update_document_namespace()
 update_date()
 
-output_file_path = sys.argv[1] + "/collabora-online-sbom.spdx.json"
+output_file_path = sys.argv[1] + "/online-office-sbom.spdx.json"
 with open(output_file_path, "w") as file:
     json.dump(sbom_data, file, indent=2)

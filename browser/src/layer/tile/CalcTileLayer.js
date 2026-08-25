@@ -13,7 +13,7 @@
  * Calc tile layer is used to display a spreadsheet document
  */
 
-/* global app RenderManager cool FocusCellSection SplitterLinesSection InternBoundsUtil */
+/* global app RenderManager cool FocusCellSection SplitterLinesSection */
 
 window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 	options: {
@@ -80,12 +80,6 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		map.addControl(window.L.control.tabs());
 		window.L.CanvasTileLayer.prototype.onAdd.call(this, map);
 
-		map.on('resize', function () {
-			if (app.file.textCursor.visible) {
-				this._onUpdateCursor(true /* scroll */);
-			}
-		}.bind(this));
-
 		app.sectionContainer.addSection(new app.definitions.CellFillMarkerSection());
 		app.sectionContainer.addSection(new SplitterLinesSection());
 		app.sectionContainer.addSection(new app.definitions.TableFillMarkerSection());
@@ -117,13 +111,13 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 
 	_onMessage: function (textMsg, img) {
 		if (textMsg.startsWith('invalidateheader: column')) {
-			this.refreshViewData({x: this._map._getTopLeftPoint().x, y: 0,
+			this.refreshViewData({x: app.activeDocument.activeLayout.viewedRectangle.cX1, y: 0,
 				offset: {x: undefined, y: 0}}, true /* compatDataSrcOnly */);
 		} else if (textMsg.startsWith('invalidateheader: row')) {
-			this.refreshViewData({x: 0, y: this._map._getTopLeftPoint().y,
+			this.refreshViewData({x: 0, y: app.activeDocument.activeLayout.viewedRectangle.cY1,
 				offset: {x: 0, y: undefined}}, true /* compatDataSrcOnly */);
 		} else if (textMsg.startsWith('invalidateheader: all')) {
-			this.refreshViewData({x: this._map._getTopLeftPoint().x, y: this._map._getTopLeftPoint().y,
+			this.refreshViewData({x: app.activeDocument.activeLayout.viewedRectangle.cX1, y: app.activeDocument.activeLayout.viewedRectangle.cY1,
 				offset: {x: undefined, y: undefined}}, true /* compatDataSrcOnly */);
 		} else if (this.options.sheetGeometryDataEnabled &&
 				textMsg.startsWith('invalidatesheetgeometry:')) {
@@ -188,6 +182,9 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		this._map.fire('zoomchanged');
 		this.refreshViewData();
 		this._replayPrintTwipsMsgs(false);
+		// refreshViewData above fetches the row and column headers and the sheet
+		// geometry; the tiles for the new zoom are requested here.
+		app.activeDocument.activeLayout.refreshTiles();
 	},
 
 	_restrictDocumentSize: function () {
@@ -207,8 +204,8 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		var isCalcRTL = this._map._docLayer.isCalcRTL();
 		lastCellPixel = isCalcRTL ? lastCellPixel.getBottomRight() : lastCellPixel.getBottomLeft();
 		var lastCellTwips = this._corePixelsToTwips(lastCellPixel);
-		var mapSizeTwips = this._pixelsToTwips(this._map.getSize());
-		var mapPosTwips = this._pixelsToTwips(this._map._getTopLeftPoint());
+		var mapSizeTwips = new cool.Point(app.activeDocument.activeLayout.viewedRectangle.width, app.activeDocument.activeLayout.viewedRectangle.height);
+		var mapPosTwips = new cool.Point(app.activeDocument.activeLayout.viewedRectangle.x1, app.activeDocument.activeLayout.viewedRectangle.y1);
 
 		// margin outside data area we allow to scroll
 		// has to be bigger on mobile to allow scroll
@@ -230,16 +227,12 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		if (limitHeight)
 			newDocHeight = lastCellTwips.y + limitMargin.y;
 
-		var extendedLimit = false;
-
 		if (!limitWidth && maxDocSize.x > app.activeDocument.fileSize.x) {
 			newDocWidth = Math.min(app.activeDocument.fileSize.x + mapSizeTwips.x, maxDocSize.x);
-			extendedLimit = true;
 		}
 
 		if (!limitHeight && maxDocSize.y > app.activeDocument.fileSize.y) {
 			newDocHeight = Math.min(app.activeDocument.fileSize.y + mapSizeTwips.y, maxDocSize.y);
-			extendedLimit = true;
 		}
 
 		var shouldRestrict = (newDocWidth !== app.activeDocument.fileSize.x ||
@@ -252,19 +245,13 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		// When there will be a Intern conversion, we should use CSS pixels.
 		var newSizePx = this._twipsToPixels(new cool.Point(newDocWidth, newDocHeight));
 
-		var topLeft = this._map.unproject(new cool.Point(0, 0));
-		var bottomRight = this._map.unproject(newSizePx);
-
 		this._docPixelSize = newSizePx.clone();
 		app.activeDocument.fileSize = new cool.SimplePoint(newDocWidth, newDocHeight);
 		app.activeDocument.activeLayout.viewSize = app.activeDocument.fileSize.clone();
 
-		this._map.setMaxBounds(InternBoundsUtil.flexConstruct(topLeft, bottomRight));
-
 		this._map.fire('scrolllimits', newSizePx.clone());
 
-		if (!this._syncTileContainerSize() && (limitWidth || limitHeight || extendedLimit))
-			app.sectionContainer.requestReDraw();
+		this._syncTileContainerSize();
 	},
 
 	// While the document size is frozen, the scrollable area does not grow or
@@ -349,43 +336,6 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		return { marginLeft, marginTop, scrollBarThickness };
 	},
 
-	_calculateNewCanvasAndMapSizes: function(documentContainerSize, availableSpace, marginLeft, marginTop, scrollBarThickness) {
-		let newMapSize = availableSpace.slice();
-		let newCanvasSize = documentContainerSize.slice();
-
-		const fileSizePixels = app.activeDocument.fileSize.pToArray();
-
-		// If we don't need that much space.
-		if (fileSizePixels[0] < availableSpace[0]) {
-			newMapSize[0] = fileSizePixels[0];
-			newCanvasSize[0] = fileSizePixels[0] + marginLeft + scrollBarThickness;
-			this.widthShrinked = true;
-		}
-		else this.widthShrinked = false;
-
-		if (fileSizePixels[1] < availableSpace[1]) {
-			newMapSize[1] = fileSizePixels[1];
-			newCanvasSize[1] = fileSizePixels[1] + marginTop + scrollBarThickness;
-			this.heightShrinked = true;
-		}
-		else this.heightShrinked = false;
-
-		newMapSize = [Math.round(newMapSize[0] / app.dpiScale), Math.round(newMapSize[1] / app.dpiScale)];
-		newCanvasSize = [Math.round(newCanvasSize[0] / app.dpiScale), Math.round(newCanvasSize[1] / app.dpiScale)];
-
-		return { newMapSize, newCanvasSize };
-	},
-
-	_resizeMapElementAndTilesLayer: function(mapElement, marginLeft, marginTop, newMapSize) {
-		mapElement.style.left = Math.round(marginLeft / app.dpiScale) + 'px';
-		mapElement.style.top = Math.round(marginTop / app.dpiScale) + 'px';
-		mapElement.style.width = newMapSize[0] + 'px';
-		mapElement.style.height = newMapSize[1] + 'px';
-
-		this._container.style.width = newMapSize[0] + 'px';
-		this._container.style.height = newMapSize[1] + 'px';
-	},
-
 	_updateHeaderSections: function() {
 		if (app.sectionContainer.doesSectionExist(app.CSections.RowHeader.name)) {
 			app.sectionContainer.getSectionWithName(app.CSections.RowHeader.name)._updateCanvas();
@@ -393,63 +343,86 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		}
 	},
 
-	_syncTileContainerSize: function(force = false) {
-		if (!this._map) return false;
+	// Size the layout spacers so the tiles (document-anchor) section shrinks to
+	// the content when the document is smaller than the frame. We no longer
+	// resize the canvas or map element here; the canvas fills the document
+	// container automatically and the tiles section expands into it, stopping at
+	// whichever spacer has a non-zero size. The spacer spans the full canvas on
+	// its cross axis so the layout engine's hit test always finds it.
+	_updateSpacerSizes: function() {
+		const rightSpacer = app.sectionContainer.getSectionWithName(app.CSections.RightSpacer.name);
+		const bottomSpacer = app.sectionContainer.getSectionWithName(app.CSections.BottomSpacer.name);
+		if (!rightSpacer || !bottomSpacer)
+			return;
 
-		if (!this._container) return false;
-
-		// Document container size is up to date as of now.
 		const documentContainerSize = this._getDocumentContainerSize();
-		documentContainerSize[0] *= app.dpiScale;
-		documentContainerSize[1] *= app.dpiScale;
+		const canvasWidth = Math.round(documentContainerSize[0] * app.dpiScale);
+		const canvasHeight = Math.round(documentContainerSize[1] * app.dpiScale);
 
-		// Size has changed. Our map and canvas are not resized yet.
-		// But the row header, row group, column header and column group sections don't need to be resized.
-		// We can get their width and height from the sections' properties.
+		// Row/column headers, groups and the scrollbars take space the tiles
+		// section cannot use.
 		const { marginLeft, marginTop, scrollBarThickness } = this._getMarginPropertiesForTheMap();
+		const availableWidth = canvasWidth - marginLeft - scrollBarThickness;
+		const availableHeight = canvasHeight - marginTop - scrollBarThickness;
 
-		// Available for tiles section.
-		// In mobile, the margins and the scroll bar can take more space than the document container
-		// when the on-screen keyboard is enabled in landscape mode. Clamp to zero so the map element
-		// gets a valid CSS size and the next resize is detected as a real size change.
-		const availableSpace = [
-			Math.max(0, documentContainerSize[0] - marginLeft - scrollBarThickness),
-			Math.max(0, documentContainerSize[1] - marginTop - scrollBarThickness)
-		];
-		const { newMapSize, newCanvasSize } = this._calculateNewCanvasAndMapSizes(documentContainerSize, availableSpace, marginLeft, marginTop, scrollBarThickness);
+		// The scrollable area (in core pixels). Smaller than the frame => leftover.
+		// On mobile in landscape with the on-screen keyboard up, the margins and the scroll bar can
+		// take more space than the document container, so the available size goes negative. Clamp
+		// the leftover to zero to keep the spacer sizes valid.
+		const viewSize = app.activeDocument.activeLayout.viewSize;
+		const leftoverX = Math.max(0, availableWidth - viewSize.pX);
+		const leftoverY = Math.max(0, availableHeight - viewSize.pY);
 
-		const mapElement = document.getElementById('map'); // map's size = tiles section's size.
-		const oldMapSize = [mapElement.clientWidth, mapElement.clientHeight];
-		const widthIncreased = oldMapSize[0] < newMapSize[0];
-		const heightIncreased = oldMapSize[1] < newMapSize[1];
-		const sizeChanged = oldMapSize[0] !== newMapSize[0] || oldMapSize[1] !== newMapSize[1];
+		this.widthShrinked = leftoverX > 0;
+		this.heightShrinked = leftoverY > 0;
 
-		// Early exit. If there is no need to update the size, return here.
-		if (sizeChanged || force) {
-			this._resizeMapElementAndTilesLayer(mapElement, marginLeft, marginTop, newMapSize);
+		// In RTL Calc the content is anchored to the right edge, so the leftover
+		// horizontal space (and therefore the spacer) sits on the left.
+		rightSpacer.anchor = this.isCalcRTL() ? ['top', 'left'] : ['top', 'right'];
 
-			this._map.invalidateSize(false, new cool.Point(oldMapSize[0], oldMapSize[1]));
-			app.sectionContainer.onResize(newCanvasSize[0], newCanvasSize[1]); // Canvas's size = documentContainer's size.
-			this._updateHeaderSections();
+		rightSpacer.size = [leftoverX, canvasHeight];
+		bottomSpacer.size = [canvasWidth, leftoverY];
+	},
 
-			this._mobileChecksAfterResizeEvent(heightIncreased);
-		}
+	_syncTileContainerSize: function() {
+		// Remember the frame size and scroll position across the relayout.
+		const oldFrame = app.activeDocument.activeLayout.frameSize;
+		const scrollX = app.activeDocument.activeLayout.viewedRectangle.pX1;
+		const scrollY = app.activeDocument.activeLayout.viewedRectangle.pY1;
 
-		// Center the view w.r.t the new map-pane position using the current zoom.
-		this._map.setView(this._map.getCenter());
+		// Size the spacers, then let the canvas match the document container
+		// automatically: onResize(0, 0) reads the container's own size. Calc no
+		// longer computes or imposes a canvas/map size here; the tiles section
+		// shrinks to the content via the spacers during the relayout.
+		this._updateSpacerSizes();
+		app.sectionContainer.onResize(0, 0);
+		this._updateHeaderSections();
 
-		if (sizeChanged || force) {
-			// We want to keep cursor visible when we show the keyboard on mobile device or tablet
-			this._nonDesktopChecksAfterResizeEvent(heightIncreased);
+		// The viewed rectangle spans the visible frame (the tiles section). Now
+		// that the layout has settled, rebuild it at that size (twips at the
+		// current zoom) and re-apply the scroll position. Nothing else maintains
+		// the viewed rectangle on load/resize, so establishing it here is what
+		// makes the document draw on load and after a resize.
+		const frame = app.activeDocument.activeLayout.frameSize;
+		app.activeDocument.activeLayout.viewedRectangle = cool.SimpleRectangle.fromCorePixels(
+			[scrollX, scrollY, frame.pX, frame.pY]);
+		app.activeDocument.activeLayout.scrollTo(scrollX, scrollY);
 
-			if (heightIncreased || widthIncreased) {
-				app.sectionContainer.requestReDraw();
-				this._map.fire('sizeincreased');
-				return true;
-			}
-		}
+		const widthIncreased = oldFrame.pX < frame.pX;
+		const heightIncreased = oldFrame.pY < frame.pY;
 
-		return false;
+		this._mobileChecksAfterResizeEvent(heightIncreased);
+		this._nonDesktopChecksAfterResizeEvent(heightIncreased);
+
+		// Keep the cell edit cursor in view after the relayout (was a map
+		// 'resize' listener; folded here now that resize is map-free).
+		if (app.file.textCursor.visible) this._onUpdateCursor(true /* scroll */);
+
+		app.sectionContainer.requestReDraw();
+
+		// A larger frame exposes area whose tiles may not be cached yet.
+		if (heightIncreased || widthIncreased)
+			this._map.fire('sizeincreased');
 	},
 
 	_onStatusMsg: function (textMsg) {
@@ -506,22 +479,19 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 
 			console.assert(this._viewId >= 0, 'Incorrect viewId received: ' + this._viewId);
 
-			var mapSize = this._map.getSize();
+			var frameSize = app.activeDocument.activeLayout.frameSize;
 			var sizePx = this._twipsToPixels(new cool.Point(app.activeDocument.fileSize.x, app.activeDocument.fileSize.y));
 			var width = sizePx.x;
 			var height = sizePx.y;
 
-			if (width < mapSize.x || height < mapSize.y) {
-				width = Math.max(width, mapSize.x);
-				height = Math.max(height, mapSize.y);
-				var topLeft = this._map.unproject(new cool.Point(0, 0));
-				var bottomRight = this._map.unproject(new cool.Point(width, height));
-				this._map.setMaxBounds(InternBoundsUtil.flexConstruct(topLeft, bottomRight));
+			if (width < frameSize.cX || height < frameSize.cY) {
+				width = Math.max(width, frameSize.cX);
+				height = Math.max(height, frameSize.cY);
 				this._docPixelSize = {x: width, y: height};
 				this._map.fire('scrolllimits', {x: width, y: height});
 			}
 			else {
-				this._updateMaxBounds(true);
+				this._updateScrollLimits();
 			}
 
 			this._adjustCanvasSectionsForLayoutChange();
@@ -587,13 +557,16 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		var offset = coordinatesData.offset || {};
 
 		var topLeftPoint = new cool.Point(coordinatesData.x, coordinatesData.y);
-		var sizePx = this._map.getSize();
+		// frameSize is a SimplePoint; copy its CSS pixels into a mutable Point
+		// as the code below may zero a component before converting to twips.
+		var frameSize = app.activeDocument.activeLayout.frameSize;
+		var sizePx = new cool.Point(frameSize.cX, frameSize.cY);
 
 		if (topLeftPoint.x === undefined) {
-			topLeftPoint.x = this._map._getTopLeftPoint().x;
+			topLeftPoint.x = app.activeDocument.activeLayout.viewedRectangle.cX1;
 		}
 		if (topLeftPoint.y === undefined) {
-			topLeftPoint.y = this._map._getTopLeftPoint().y;
+			topLeftPoint.y = app.activeDocument.activeLayout.viewedRectangle.cY1;
 		}
 
 		var updateRows = true;
@@ -839,8 +812,8 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 		let autoFilterAnchorRow = -1;
 		if (this.sheetGeometry && this.sheetGeometry.autoFilterChanged) {
 			this.sheetGeometry.setViewArea(
-				this._pixelsToTwips(this._map._getTopLeftPoint()),
-				this._pixelsToTwips(this._map.getSize()));
+				new cool.Point(app.activeDocument.activeLayout.viewedRectangle.x1, app.activeDocument.activeLayout.viewedRectangle.y1),
+				new cool.Point(app.activeDocument.activeLayout.viewedRectangle.width, app.activeDocument.activeLayout.viewedRectangle.height));
 			autoFilterAnchorRow = this.sheetGeometry.getViewRowRange().start;
 		}
 
@@ -865,13 +838,13 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 			const targetData = this.sheetGeometry.getRowsGeometry().getElementData(autoFilterAnchorRow);
 			if (targetData) {
 				app.activeDocument.activeLayout.scrollTo(
-					this._map._getTopLeftPoint().x,
+					app.activeDocument.activeLayout.viewedRectangle.pX1,
 					targetData.startpos);
 			}
 		} else {
 			this.sheetGeometry.setViewArea(
-				this._pixelsToTwips(this._map._getTopLeftPoint()),
-				this._pixelsToTwips(this._map.getSize()));
+				new cool.Point(app.activeDocument.activeLayout.viewedRectangle.x1, app.activeDocument.activeLayout.viewedRectangle.y1),
+				new cool.Point(app.activeDocument.activeLayout.viewedRectangle.width, app.activeDocument.activeLayout.viewedRectangle.height));
 		}
 
 		this._addRemoveGroupSections();
@@ -1078,7 +1051,14 @@ window.L.CalcTileLayer = window.L.CanvasTileLayer.extend({
 			this._splitPanesContext.setSplitRow(newSplitIndex);
 
 		if (changed) {
+			// newSplitIndex just came from core, so it is already authoritative. Converting
+			// it to a pixel position and back to an index (as setSplitPosFromCell() does) can
+			// round to a different index at an exact span boundary (e.g. right after a run of
+			// hidden columns), and re-sending that rounded index would overwrite the correct
+			// one core just told us about.
+			this.dontSendSplitPosToCore = true;
 			this.setSplitPosFromCell();
+			this.dontSendSplitPosToCore = false;
 		}
 	},
 

@@ -64,7 +64,7 @@ class InternPointUtil {
 		return pt;
 	}
 
-	// Needed in Map.prototype.unproject()
+	// Needed in DocumentBase.unproject()
 	// constructs Twips point from css pixel point at a given zoom.
 	public static pointToIntern(
 		point: cool.Point,
@@ -76,7 +76,7 @@ class InternPointUtil {
 		return new cool.SimplePoint(point.x * multFactor, point.y * multFactor);
 	}
 
-	// Needed in Map.prototype.project()
+	// Needed in DocumentBase.project()
 	// constructs css pixel point from Intern at a given zoom.
 	public static internToPoint(
 		intern: cool.SimplePoint,
@@ -88,7 +88,7 @@ class InternPointUtil {
 		return new cool.Point(intern.x * multFactor, intern.y * multFactor);
 	}
 
-	// used in Map.prototype.rescale(), only makes sense for pixel points.
+	// used in DocumentBase.rescale(), only makes sense for pixel points.
 	// (cool.Point, number, number) -> cool.Point
 	public static rescale(
 		point: cool.Point,
@@ -97,16 +97,6 @@ class InternPointUtil {
 	): cool.Point {
 		const scale = InternPointUtil.scale(newZoom - oldZoom);
 		return cool.Point.toPoint(point.x * scale, point.y * scale);
-	}
-
-	// used in Map.prototype.distance()
-	public static distance(
-		intern1: cool.SimplePoint,
-		intern2: cool.SimplePoint,
-	): number {
-		const dx = intern2.x - intern1.x;
-		const dy = intern2.y - intern1.y;
-		return Math.sqrt(dx * dx + dy * dy);
 	}
 }
 

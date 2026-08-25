@@ -98,6 +98,7 @@
 #include <comphelper/random.hxx>
 #include <comphelper/base64.hxx>
 #include <comphelper/dispatchcommand.hxx>
+#include <comphelper/docpasswordhelper.hxx>
 #include <comphelper/embeddedobjectcontainer.hxx>
 #include <comphelper/kit.hxx>
 #include <comphelper/legacyunoapinotice.hxx>
@@ -1266,7 +1267,7 @@ static void doc_destroyView(COKitDocument* pThis, int nId);
 static void doc_setView(COKitDocument* pThis, int nId);
 static int doc_getView(COKitDocument* pThis);
 static int doc_getViewsCount(COKitDocument* pThis);
-static bool doc_getViewIds(COKitDocument* pThis, int* pArray, size_t nSize);
+static bool doc_getViewIds(COKitDocument* pThis, std::vector<int>& rIds);
 static void doc_setViewLanguage(COKitDocument* pThis, int nId, const char* language);
 static unsigned char* doc_renderFontOrientation(COKitDocument* pThis,
                           const char *pFontName,
@@ -1671,9 +1672,9 @@ void COKitDocumentImpl::paintPartTile(unsigned char* pBuffer, const int nPart, c
                       nTilePosY, nTileWidth, nTileHeight, bIsPreview);
 }
 
-bool COKitDocumentImpl::getViewIds(int* pArray, size_t nSize)
+bool COKitDocumentImpl::getViewIds(std::vector<int>& rIds)
 {
-    return doc_getViewIds(this, pArray, nSize);
+    return doc_getViewIds(this, rIds);
 }
 
 void COKitDocumentImpl::setOutlineState(bool bColumn, int nLevel, int nIndex, bool bHidden)
@@ -5176,8 +5177,8 @@ inline static int getFirstViewIdAsFallback(COKitDocument* pThis)
 
     if (viewCount == 0) return -1;
 
-    std::vector<int> viewIds(viewCount);
-    doc_getViewIds(pThis, viewIds.data(), viewCount);
+    std::vector<int> viewIds;
+    doc_getViewIds(pThis, viewIds);
 
     int result = viewIds[0];
     doc_setView(pThis, result);
@@ -7494,15 +7495,86 @@ static void doc_resetSelection(COKitDocument* pThis)
     pDoc->resetSelection();
 }
 
+/// Whether the document carries a separate password required to modify it.
+static bool hasPasswordToModify(const SfxObjectShell* pObjectShell)
+{
+    return pObjectShell->GetModifyPasswordHash() // binary DOC/XLS/PPT formats
+           || pObjectShell->GetModifyPasswordInfo().hasElements(); // ODF/OOXML
+}
+
+/// Whether the document has a password to modify that has not been entered yet.
+static bool hasPendingPasswordToModify(const SfxObjectShell* pObjectShell)
+{
+    return hasPasswordToModify(pObjectShell) && !pObjectShell->IsModifyPasswordEntered();
+}
+
 static std::string getDocReadOnly(COKitDocument* pThis)
 {
     SfxObjectShell* pObjectShell = getSfxObjectShell(pThis);
     if (!pObjectShell)
         return {};
 
+    bool bReadOnly = pObjectShell->IsLoadReadonly() || hasPendingPasswordToModify(pObjectShell);
+    if (!bReadOnly && hasPasswordToModify(pObjectShell))
+    {
+        const SfxViewShell* pViewShell = SfxViewShell::Current();
+        bReadOnly = pViewShell && pViewShell->IsKitReadOnlyView();
+    }
+
     boost::property_tree::ptree aTree;
     aTree.put("commandName", ".uno:ReadOnly");
-    aTree.put("success", pObjectShell->IsLoadReadonly());
+    aTree.put("success", bReadOnly);
+
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+    return aStream.str();
+}
+
+static std::string getDocHasPasswordToModify(COKitDocument* pThis)
+{
+    SfxObjectShell* pObjectShell = getSfxObjectShell(pThis);
+    if (!pObjectShell)
+        return {};
+
+    boost::property_tree::ptree aTree;
+    aTree.put("commandName", ".uno:HasPasswordToModify");
+    aTree.put("success", hasPendingPasswordToModify(pObjectShell));
+
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, aTree, false /* pretty */);
+    return aStream.str();
+}
+
+static std::string verifyDocPasswordToModify(COKitDocument* pThis, std::u16string_view rPassword)
+{
+    SfxObjectShell* pObjectShell = getSfxObjectShell(pThis);
+    if (!pObjectShell)
+        return {};
+
+    const cpo::uno::Sequence<css::beans::PropertyValue> aInfo
+        = pObjectShell->GetModifyPasswordInfo();
+
+    bool bCorrect = false;
+    if (aInfo.hasElements()) // ODF/OOXML
+    {
+        bCorrect = comphelper::DocPasswordHelper::IsModifyPasswordCorrect(rPassword, aInfo);
+    }
+    else if (pObjectShell->GetModifyPasswordHash()) // binary DOC/XLS/PPT formats
+    {
+        const SfxMedium* pMedium = pObjectShell->GetMedium();
+        const std::shared_ptr<const SfxFilter> pFilter
+            = pMedium ? pMedium->GetFilter() : nullptr;
+        if (pFilter)
+        {
+            const bool bWriter = pFilter->GetServiceName() == "com.sun.star.text.TextDocument";
+            bCorrect = SfxMedium::CreatePasswordToModifyHash(rPassword, bWriter)
+                       == pObjectShell->GetModifyPasswordHash();
+        }
+    }
+
+    boost::property_tree::ptree aTree;
+    aTree.put("commandName", ".uno:VerifyPasswordToModify");
+    aTree.put("success", bCorrect);
 
     std::stringstream aStream;
     boost::property_tree::write_json(aStream, aTree, false /* pretty */);
@@ -8067,6 +8139,25 @@ static std::string doc_getCommandValues(COKitDocument* pThis, const char* pComma
     {
         return getDocReadOnly(pThis);
     }
+    else if (aCommand == ".uno:HasPasswordToModify")
+    {
+        return getDocHasPasswordToModify(pThis);
+    }
+    else if (aCommand.starts_with(".uno:VerifyPasswordToModify"))
+    {
+        // The password parameter is URL-encoded, so it can contain any character.
+        static constexpr std::string_view aPrefix = ".uno:VerifyPasswordToModify?password=";
+        if (!aCommand.starts_with(aPrefix))
+        {
+            SetLastExceptionMsg(u"Missing password parameter for .uno:VerifyPasswordToModify"_ustr);
+            return {};
+        }
+
+        const OUString sEncoded = OUString::fromUtf8(aCommand.substr(aPrefix.size()));
+        const OUString sPassword
+            = rtl::Uri::decode(sEncoded, rtl_UriDecodeWithCharset, RTL_TEXTENCODING_UTF8);
+        return verifyDocPasswordToModify(pThis, sPassword);
+    }
     else if (aCommand == ".uno:ExternalLinksDisabled")
     {
         return getExternalLinksDisabled(pThis);
@@ -8397,7 +8488,7 @@ static int doc_getViewsCount(SAL_UNUSED_PARAMETER COKitDocument* pThis)
     return KitHelper::getViewsCount(pDocument->mnDocumentId);
 }
 
-static bool doc_getViewIds(SAL_UNUSED_PARAMETER COKitDocument* pThis, int* pArray, size_t nSize)
+static bool doc_getViewIds(SAL_UNUSED_PARAMETER COKitDocument* pThis, std::vector<int>& rIds)
 {
     comphelper::ProfileZone aZone("doc_getViewsIds");
 
@@ -8405,7 +8496,7 @@ static bool doc_getViewIds(SAL_UNUSED_PARAMETER COKitDocument* pThis, int* pArra
     SetLastExceptionMsg();
 
     COKitDocumentImpl* pDocument = static_cast<COKitDocumentImpl*>(pThis);
-    return KitHelper::getViewIds(pDocument->mnDocumentId, pArray, nSize);
+    return KitHelper::getViewIds(pDocument->mnDocumentId, rIds);
 }
 
 static void doc_setViewLanguage(SAL_UNUSED_PARAMETER COKitDocument* /*pThis*/, int nId, const char* language)
@@ -8966,6 +9057,9 @@ static void doc_setColorPreviewState(SAL_UNUSED_PARAMETER COKitDocument* /*pThis
 
 void COKitImpl::executeScript(
     char const * script, std::string_view source, int line, char ** result, char ** error,
+    std::function<void(void * data, std::string_view level, std::string_view message)>
+        consoleCallback,
+    void * consoleCallbackData,
     void (*proxyCallback) (void * data, char const * payload), void * proxyCallbackData,
     bool * usedLegacyUnoApi)
 {
@@ -8985,8 +9079,10 @@ void COKitImpl::executeScript(
     }
     try {
         OUString value = jsuno::execute(
-            OUString::fromUtf8(script), OUString::fromUtf8(source), line, std::move(hook),
-            usedLegacyUnoApi);
+            OUString::fromUtf8(script), OUString::fromUtf8(source), line,
+            [consoleCallback, consoleCallbackData](OUString const & level, OUString const & message)
+            { consoleCallback(consoleCallbackData, level.toUtf8(), message.toUtf8()); },
+            std::move(hook), usedLegacyUnoApi);
         if (!value.isEmpty()) {
             *result = convertOUString(value);
         }
@@ -9016,6 +9112,8 @@ void COKitImpl::executeScript(
     (void) script;
     (void) source;
     (void) line;
+    (void) consoleCallback;
+    (void) consoleCallbackData;
     (void) proxyCallback;
     (void) proxyCallbackData;
     (void) usedLegacyUnoApi;

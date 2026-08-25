@@ -28,8 +28,8 @@
 /* Default cool UI used in for monitoring URI */
 #define COOLWSD_TEST_METRICS "/cool/getMetrics"
 
-/* Default cool UI used in the start test URI */
-#define COOLWSD_TEST_COOL_UI "/browser/" COOLWSD_VERSION_HASH "/debug.html"
+/* Page that lists the documents this server can open, and opens the one picked */
+#define COOLWSD_TEST_DOCUMENT_PICKER "/browser/" COOLWSD_VERSION_HASH "/documents.html"
 
 /* Default ciphers used, when not specified otherwise */
 #define DEFAULT_CIPHER_SET "ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH"
@@ -788,22 +788,6 @@ inline std::string getLaunchBase(bool asAdmin = false)
     return oss.str();
 }
 
-inline std::string getLaunchURI(const std::string &document, bool readonly = false)
-{
-    std::ostringstream oss;
-
-    oss << getLaunchBase();
-    oss << COOLWSD::ServiceRoot;
-    oss << COOLWSD_TEST_COOL_UI;
-    oss << "?file_path=";
-    const std::string dir = DEBUG_ABSSRCDIR "/";
-    oss << Uri::encode(dir + document);
-    if (readonly)
-        oss << "&permission=readonly";
-
-    return oss.str();
-}
-
 inline std::string getServiceURI(const std::string &sub, bool asAdmin = false)
 {
     std::ostringstream oss;
@@ -1441,7 +1425,10 @@ void COOLWSD::setupChildRoot(const bool UseMountNamespaces)
 
     if constexpr (!Util::isMobileApp())
     {
-        // Create after cleanupJails, which deletes any pre-existing content under ChildRoot.
+        // The TMPDIR that coolwsd, forkit and anything they spawn inherit. Library code that
+        // honours TMPDIR lands its files here, in the phase before any jail exists. It sits above
+        // the jails, so nothing inside one can see it. Create it after cleanupJails, which
+        // deletes any pre-existing content under ChildRoot.
         const std::string tmpDir = ChildRoot + "systmp";
         FileUtil::createDirectories(tmpDir);
         LOG_INF("Setting system temporary directory path: " << tmpDir);
@@ -2618,9 +2605,14 @@ void COOLWSD::initializeSSL()
             ssl_cipher_list = DEFAULT_CIPHER_SET;
     LOG_INF("SSL Cipher list: " << ssl_cipher_list);
 
+    const std::string ssl_min_protocol_version =
+        config().getString("ssl.min_protocol_version", "TLSv1.2");
+    LOG_INF("SSL minimum protocol version: " << ssl_min_protocol_version);
+
     // Initialize the non-blocking server socket SSL context.
     ssl::Manager::initializeServerContext(ssl_cert_file_path, ssl_key_file_path, ssl_ca_file_path,
-                                          ssl_cipher_list, ssl::CertificateVerification::Disabled);
+                                          ssl_cipher_list, ssl::CertificateVerification::Disabled,
+                                          ssl_min_protocol_version);
 
     if (!ssl::Manager::isServerContextInitialized())
         LOG_ERR("Failed to initialize Server SSL.");
@@ -2713,9 +2705,7 @@ void COOLWSD::defineOptions(Poco::Util::OptionSet& optionSet)
 
     optionSet.addOption(Option("use-env-vars", "",
                                "Use the environment variables defined on "
-                               "https://sdk.collaboraonline.com/docs/installation/"
-                               "CODE_Docker_image.html#setting-the-application-configuration-"
-                               "dynamically-via-environment-variables to set options. "
+                               "the documented Online Office container environment variables to set options. "
                                "'extra_params' is appended to the command line by this option; "
                                "'DONT_GEN_SSL_CERT' and 'cert_domain' control certificate "
                                "generation independently of this option.")
@@ -2734,7 +2724,7 @@ void COOLWSD::defineOptions(Poco::Util::OptionSet& optionSet)
                                 .repeatable(false)
                                 .argument("seconds"));
 
-        optionSet.addOption(Option("singlekit", "", "Spawn one CollaboraOffice kit.")
+        optionSet.addOption(Option("singlekit", "", "Spawn one Online Office kit.")
                                 .required(false)
                                 .repeatable(false));
 
@@ -2880,7 +2870,7 @@ void COOLWSD::displayHelp()
     Poco::Util::HelpFormatter helpFormatter(options());
     helpFormatter.setCommand(commandName());
     helpFormatter.setUsage("OPTIONS");
-    helpFormatter.setHeader("Collabora Online WebSocket server.");
+    helpFormatter.setHeader("Online Office WebSocket server.");
     helpFormatter.format(std::cout);
 }
 
@@ -4144,43 +4134,23 @@ void COOLWSD::innerMain()
 #endif
 
 #if !MOBILEAPP && ENABLE_DEBUG
-    const std::string postMessageFilePath = Uri::encode(DEBUG_ABSSRCDIR "/test/samples/writer-edit.fodt");
-    const std::string postMessageURI =
-        getServiceURI("/browser/dist/framed.doc.html?file_path=" + postMessageFilePath);
     std::ostringstream oss;
-    std::ostringstream ossRO;
-    oss << "\nLaunch one of these in your browser:\n\n"
-           "Edit mode:" << '\n';
+    oss << "\nPick a document to open in your browser, including one from your own machine:\n\n"
+        << getServiceURI(COOLWSD_TEST_DOCUMENT_PICKER) << '\n';
 
-    auto names = FileUtil::getDirEntries(DEBUG_ABSSRCDIR "/test/samples");
-    for (const auto &i : names)
-    {
-        if (i.find("-edit") != std::string::npos)
-        {
-            std::string padded(i);
-            constexpr int width = 22;
-            if (padded.size() < width)
-            {
-                padded.insert(padded.size(), width - padded.size(), ' ');
-            }
-            oss   << "    " << padded << getLaunchURI(std::string("test/samples/") + i) << "\n";
-            ossRO << "    " << padded << getLaunchURI(std::string("test/samples/") + i, true) << "\n";
-        }
-    }
-
-    oss << "\nReadonly mode:" << '\n'
-        << ossRO.str()
-        << "\npostMessage: " << postMessageURI << std::endl;
-
+    // The page cannot fill in the admin user name and password, so these two carry the
+    // credentials from the configuration.
     const std::string adminURI = getServiceURI(COOLWSD_TEST_ADMIN_CONSOLE, true);
     if (!adminURI.empty())
-        oss << "\nOr for the admin, monitoring, capabilities, discovery & health:\n\n"
+        oss << "\nThe admin console and the metrics, ready to open without logging in:\n\n"
             << adminURI << '\n'
-            << getServiceURI(COOLWSD_TEST_METRICS, true) << '\n'
-            << getServiceURI("/hosting/capabilities") << '\n'
-            << getServiceURI("/hosting/discovery") << '\n'
-            << getServiceURI("/livez?verbose") << '\n'
-            << getServiceURI("/readyz?verbose") << '\n';
+            << getServiceURI(COOLWSD_TEST_METRICS, true) << '\n';
+
+    oss << "\nThe capabilities, the discovery and the health checks:\n\n"
+        << getServiceURI("/hosting/capabilities") << '\n'
+        << getServiceURI("/hosting/discovery") << '\n'
+        << getServiceURI("/livez?verbose") << '\n'
+        << getServiceURI("/readyz?verbose") << '\n';
 
     oss << std::endl;
     std::cerr << oss.str();

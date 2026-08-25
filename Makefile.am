@@ -102,10 +102,10 @@ dist_doc_DATA = wsd/README.vars \
                 THIRDPARTYLICENSES
 
 if !ENABLE_FUZZERS
-# The SBOM rule pulls in coolforkit-ns (via collabora-online-sbom.spdx.json:
+# The SBOM rule pulls in coolforkit-ns (via online-office-sbom.spdx.json:
 # coolforkit-ns), so gate it out of fuzzer builds where the binary is not
 # wanted.
-doc_DATA = collabora-online-sbom.spdx.json
+doc_DATA = online-office-sbom.spdx.json
 endif
 
 coolwsddatadir = @COOLWSD_DATADIR@
@@ -563,6 +563,10 @@ build-gbuild: FORCE
 	$(MAKE) $(if $(verbose),,-s) -C $(abs_top_srcdir)/gbuild BUILDDIR=$(ENGINE_BUILDDIR) ONLINE.SRCDIR=$(abs_top_srcdir) ONLINE.BUILDDIR=$(abs_top_builddir) ONLINE.CAP_LIBS='$(CAP_LIBS)' ONLINE.SIMD_CFLAGS='$(SIMD_CFLAGS)' Module_gbuild
 $(GBUILD_EXES) $(GBUILD_EXES_NOINST): build-gbuild
 
+# Similar to build-gbuild, but for the --enable-fuzzers case.
+build-fuzzer-gbuild-libs: FORCE
+	$(MAKE) $(if $(verbose),,-s) -C $(abs_top_srcdir)/gbuild BUILDDIR=$(ENGINE_BUILDDIR) ONLINE.SRCDIR=$(abs_top_srcdir) ONLINE.BUILDDIR=$(abs_top_builddir) ONLINE.CAP_LIBS='$(CAP_LIBS)' ONLINE.SIMD_CFLAGS='$(SIMD_CFLAGS)' ONLINE.FUZZER_CFLAGS='-fsanitize=fuzzer-no-link' StaticLibrary_shared
+
 FORCE:
 
 if HAVE_LO_PATH
@@ -619,7 +623,7 @@ clean-local:
 	if test -f config.h && test -f "$(ENGINE_BUILDDIR)/config_host.mk"; then $(MAKE) $(if $(verbose),,-s) -C $(abs_top_srcdir)/gbuild BUILDDIR=$(ENGINE_BUILDDIR) ONLINE.SRCDIR=$(abs_top_srcdir) ONLINE.BUILDDIR=$(abs_top_builddir) Module_gbuild.clean; else rm -f $(GBUILD_EXES) $(GBUILD_EXES_NOINST); fi
 	rm -f .dir
 	rm -rf loolwsd loolwsd_fuzzer coolwsd_fuzzer loolstress loolsocketdump
-	rm -rf collabora-online-sbom.spdx.json
+	rm -rf online-office-sbom.spdx.json
 	rm -rf test/data/presets
 	rm -f test/samples/calc-edit.fods test/samples/draw-edit.odg test/samples/impress-edit.fodp test/samples/writer-edit.fodt test/samples/writer-large-edit.fodt
 	$(CLEANUP_COVERAGE)
@@ -773,7 +777,7 @@ endif
 .PHONY: cleanup setup-wsd
 
 if ENABLE_FUZZERS
-ALL_LOCAL_DEPS=
+ALL_LOCAL_DEPS=build-fuzzer-gbuild-libs
 else
 ALL_LOCAL_DEPS=coolwsd
 endif
@@ -1000,5 +1004,5 @@ czech: all-local presets-dir
 	@echo "Running unit-tests only"
 	$(MAKE) check -C test
 
-collabora-online-sbom.spdx.json: coolforkit-ns
+online-office-sbom.spdx.json: coolforkit-ns
 	$(QUIET_SBOM) python3 $(abs_top_srcdir)/scripts/create-sbom.py $(abs_top_builddir)

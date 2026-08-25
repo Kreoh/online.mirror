@@ -214,7 +214,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 		var docType = this._map.getDocType();
 		var moduleName = moduleByDocType[docType];
 
-		var brand = (typeof brandProductName !== 'undefined' && brandProductName) ? brandProductName : 'Collabora Online';
+		var brand = (typeof brandProductName !== 'undefined' && brandProductName) ? brandProductName : 'Online Office';
 		var product = moduleName ? brand.replace(/Online$/, moduleName).trim() : brand;
 		if (moduleName && product === brand)
 			product = brand + ' ' + moduleName;
@@ -667,7 +667,7 @@ window.L.Map.WOPI = window.L.Handler.extend({
 
 		// For all other messages, warn if trying to interact before we are completely loaded
 		if (!this._appLoaded) {
-			window.app.console.error('Collabora Online not loaded yet. Listen for App_LoadingStatus (Document_Loaded) event before using PostMessage API. Ignoring post message \'' + msg.MessageId + '\'.');
+			window.app.console.error('Online Office is not loaded yet. Listen for App_LoadingStatus (Document_Loaded) before using the PostMessage API. Ignoring post message \'' + msg.MessageId + '\'.');
 			return;
 		}
 

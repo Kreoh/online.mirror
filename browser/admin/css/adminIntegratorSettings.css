@@ -856,12 +856,12 @@ ul {
 	color: var(--settings-text);
 }
 
-#common-smartZoom-container {
+.checkbox-with-description {
     flex-direction: column;
     align-items: start;
 }
 
-#common-smartZoom-container > p {
+.checkbox-with-description > p {
     margin-left: 46px;
     font-size: var(--description-font-size);
     margin-right: 10px;
@@ -887,6 +887,15 @@ ul {
 .view-setting-small-label.disabled-label {
   opacity: 0.5;
   filter: saturate(0.7);
+}
+
+.checkbox-radio-switch--disabled {
+	opacity: 0.5;
+	filter: saturate(0.7);
+}
+
+.checkbox-radio-switch--disabled .checkbox-content {
+	cursor: default;
 }
 
 .signature-textarea {

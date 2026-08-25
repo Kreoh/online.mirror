@@ -46,11 +46,6 @@ interface MapInterface extends Evented {
 
 	removeLayer(layer: any): void;
 	addLayer(layer: any): void;
-	setZoom(
-		targetZoom: number,
-		options: { [key: string]: any } | null,
-		animate?: boolean,
-	): void;
 
 	stateChangeHandler: {
 		getItemValue(unoCmd: string): any;
@@ -64,8 +59,6 @@ interface MapInterface extends Evented {
 	isPresentationOrDrawing(): boolean;
 
 	getDocSize(): cool.Point;
-	getSize(): cool.Point;
-	getCenter(): InternPointLike;
 	getContainer(): Element;
 	_getCurrentFontName(): string;
 
@@ -152,8 +145,14 @@ interface MapInterface extends Evented {
 
 	_shouldStartReadOnly(): boolean;
 	_switchToEditMode(): void;
+	_proceedEditMode(): void;
+	_askForPasswordToModify(wrongPassword: boolean): void;
 
 	_permission: 'edit' | 'readonly' | 'view';
+
+	// The document has a separate password for editing.
+	_docHasPasswordToModify: boolean;
+	_modifyPasswordProvided: boolean;
 
 	toolbarUpTemplate: any;
 	menubar: Menubar;
@@ -170,14 +169,10 @@ interface MapInterface extends Evented {
 	calcInputBarHasFocus(): boolean;
 	hasFocus(): boolean;
 	lockAccessibilityOn(): void;
-	getPixelBounds(center?: InternPointLike, zoom?: number): cool.Bounds;
-	getPixelBoundsCore(center?: InternPointLike, zoom?: number): cool.Bounds;
 	_partsDirection: number;
-	getZoomScale(toZoom: number, fomZoom?: number): number;
 	_docLoaded: boolean;
 	contextToolbar?: ContextToolbar;
 	getSplitPanesContext(): cool.SplitPanesContext | undefined;
-	getScaleZoom(scale: number, fromZoom?: number): number;
 	scrollingIsHandled: boolean;
 	showComments(on?: boolean): void;
 	showResolvedComments(on?: boolean): void;
@@ -188,15 +183,8 @@ interface MapInterface extends Evented {
 		external?: boolean,
 		calledFromSetPartHandler?: boolean,
 	): void;
-	mouseEventToIntern(e: any): InternPointLike;
 	_limitZoom(zoom: number): number;
-	setView(
-		center: [number, number],
-		zoom?: number,
-		reset?: boolean,
-	): MapInterface;
 	isViewReadOnly(viewid: number): boolean;
-	scrollHandler: typeof window.L.Map.Scroll;
 	context?: { appId: string; context: string };
 	eSignature?: cool.ESignature;
 

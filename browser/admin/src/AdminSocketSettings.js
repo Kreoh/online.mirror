@@ -90,7 +90,7 @@ var AdminSocketSettings = AdminSocketBase.extend({
 			var coolwsdVersionObj = JSON.parse(textMsg.substring(textMsg.indexOf('{')));
 			var h = coolwsdVersionObj.Hash;
 			if (parseInt(h,16).toString(16) === h.toLowerCase().replace(/^0+/, '')) {
-				h = '<a target="_blank" href="https://gerrit.collaboraoffice.com/plugins/gitiles/online/+log/' + h + '">' + h + '</a>';
+				h = '<span>' + h + '</span>';
 				$('#coolwsd-version').html(coolwsdVersionObj.Version + ' (git hash: ' + h + ')');
 			}
 			else {

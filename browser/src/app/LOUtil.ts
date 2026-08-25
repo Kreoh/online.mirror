@@ -507,6 +507,7 @@ class LOUtil {
 			fontworkcharacterspacingfloater: 'spacing',
 			tablesort: 'datasort',
 			spellcheckignoreall: 'spelling',
+			spellonline: 'autospellcheck-on',
 			deleterowbreak: 'delbreakmenu',
 			alignmentpropertypanel: 'alignvcenter',
 			cellvertcenter: 'alignvcenter',
@@ -696,6 +697,7 @@ class LOUtil {
 			open: 'formularesfapopen',
 			'exportas-pdf': 'exportpdf',
 			'exportas-epub': 'exportepub',
+			'exportas-md': 'downloadas-md',
 			'fullscreen-drawing': 'presentation',
 			endnotedialog: 'footnotedialog',
 			updateallindexes: 'insertmultiindex',
@@ -1023,6 +1025,17 @@ class LOUtil {
 		if (text) document.execCommand('insertText', false, text);
 	}
 
+	// Turns arbitrary text into an HTML-safe string with no markup at all, unlike
+	// sanitize above, which still lets safe markup (bold, links, ...) through.
+	// Uses the browser's own serializer rather than a hand-written substitution:
+	// setting textContent escapes the text as a text node, and reading innerHTML
+	// back out gives that same text as HTML source.
+	public static escapeHtml(text: string): string {
+		const div = document.createElement('div');
+		div.textContent = text;
+		return div.innerHTML;
+	}
+
 	// Mirror data-cooltip onto aria-label so the accessible name
 	// matches the visible tooltip, even when branding overrides
 	// data-cooltip after load (e.g. to "Collabora Online"). When
@@ -1045,6 +1058,33 @@ class LOUtil {
 		new MutationObserver(syncAriaLabel).observe(docLogo, {
 			attributes: true,
 			attributeFilter: ['data-cooltip', 'href'],
+		});
+	}
+
+	/**!
+	 * Turn the file type icon into a control that opens the templates
+	 * of the running application, which the backstage view filters down
+	 * to the type of the open document. The icon is an anchor without an
+	 * href, which the browser neither focuses nor activates from the
+	 * keyboard, so the role, the tab stop and the Enter and Space keys
+	 * are all set up here.
+	 */
+	public static openTemplatesFromDocumentLogo(
+		docLogo: HTMLElement,
+		map: any,
+	): void {
+		docLogo.setAttribute('role', 'button');
+		docLogo.setAttribute('tabindex', '0');
+
+		const openTemplates = () => {
+			if (map && map.backstageView) map.backstageView.show('new');
+		};
+
+		docLogo.addEventListener('click', openTemplates);
+		docLogo.addEventListener('keydown', (event: KeyboardEvent) => {
+			if (event.key !== 'Enter' && event.key !== ' ') return;
+			event.preventDefault();
+			openTemplates();
 		});
 	}
 

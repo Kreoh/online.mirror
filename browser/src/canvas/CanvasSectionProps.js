@@ -32,6 +32,8 @@ app.CSections.MouseControl =        { name: "mouse-control"     , zIndex: 5 }; /
 app.CSections.CommentList =			{ name: 'comment list'		, zIndex: 5	};
 app.CSections.RulerSpacer =			{ name: 'ruler spacer'		, zIndex: 5 };
 app.CSections.Tiles = 				{ name: 'tiles'				, zIndex: 5 };
+app.CSections.RightSpacer =			{ name: 'right spacer'		, zIndex: 5 };
+app.CSections.BottomSpacer =			{ name: 'bottom spacer'		, zIndex: 5 };
 app.CSections.VectorContent =		{ name: 'vector content', zIndex: 5 };
 app.CSections.CompareChangesLabel =	{ name: 'compare changes label', zIndex: 5 };
 app.CSections.Overlays =				{ name: 'overlay'			, zIndex: 5 };
@@ -72,6 +74,7 @@ app.CSections.CalcValidityDropDown =  { name: 'calc validity dropdown', zIndex: 
 app.CSections.FormulaErrorHelpButton = { name: 'formula error help button', zIndex: 11 };
 
 app.CSections.Scroll =				{ name: 'scroll'			, zIndex: 13 };
+app.CSections.ZoomControl =		{ name: 'zoom control'	, zIndex: 13 };
 
 /*
     zIndex = 5. z-index of tiles.
@@ -88,6 +91,8 @@ app.CSections.CornerHeader.processingOrder =			30; // Calc.
 app.CSections.RowHeader.processingOrder =				40; // Calc.
 app.CSections.ColumnHeader.processingOrder =			50; // Calc.
 app.CSections.RulerSpacer.processingOrder =			55; // Writer. Before tiles so it is located first.
+app.CSections.RightSpacer.processingOrder =			56; // Calc. Before tiles so tiles shrinks to it.
+app.CSections.BottomSpacer.processingOrder =			57; // Calc. Before tiles so tiles shrinks to it.
 app.CSections.Tiles.processingOrder = 				60; // Writer & Impress & Calc.
 app.CSections.VectorContent.processingOrder =		60; // Impress & Draw.
 app.CSections.CompareChangesLabel.processingOrder =	61; // Writer.
@@ -108,6 +113,8 @@ app.CSections.ShapeHandlesSection.processingOrder =	75;
 app.CSections.Splitter.processingOrder = 			    80; // Calc.
 
 app.CSections.CalcGrid.drawingOrder = 				40; // Calc.
+app.CSections.RightSpacer.drawingOrder =				45; // Calc. Draws nothing; before tiles.
+app.CSections.BottomSpacer.drawingOrder =			46; // Calc. Draws nothing; before tiles.
 app.CSections.RulerSpacer.drawingOrder =				49; // Writer. Before tiles.
 app.CSections.Tiles.drawingOrder = 					50; // Writer & Impress & Calc.
 app.CSections.VectorContent.drawingOrder =		50; // Impress & Draw.
@@ -157,5 +164,7 @@ app.CSections.HeaderFooterBoundary.drawingOrder =	3; // Writer.
 
 /* zIndex = 13 */
 app.CSections.Scroll.processingOrder = 				1; // Writer & Impress & Calc.
+app.CSections.ZoomControl.processingOrder =		2; // Calc. After scroll; captures zoom gestures over the tiles area.
 
 app.CSections.Scroll.drawingOrder = 					1; // Writer & Impress & Calc.
+app.CSections.ZoomControl.drawingOrder =			2; // Calc. Draws nothing; ordering only.

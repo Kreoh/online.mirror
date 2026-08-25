@@ -7,7 +7,7 @@
  * at TextInput.
  */
 
-/* global app UNOKey RenderManager OverviewFade */
+/* global app UNOKey RenderManager */
 
 window.L.Map.mergeOptions({
 	keyboard: true,
@@ -538,6 +538,14 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 				app.socket.sendMessage('uno .uno:Undo');
 				ev.preventDefault();
 			}
+			else if (!ev.ctrlKey && !ev.altKey && !ev.shiftKey && !ev.metaKey
+				&& ev.keyCode === this.keyCodes.enter && ev.type === 'keydown') {
+				if (this._map.isEditMode() && !app.file.fileBasedView &&
+					this._map.jsdialog && !this._map.jsdialog.hasDialogOpened()) {
+					this._map.insertPage();
+				}
+				ev.preventDefault();
+			}
 			else if (!ev.ctrlKey && !ev.shiftKey) {
 				if (ev.key === 'Meta' || ev.key === 'Alt' ||
 				    ev.key === 'AltGraph' || ev.key === 'CapsLock' ||
@@ -760,8 +768,7 @@ window.L.Map.Keyboard = window.L.Handler.extend({
 			}
 			else if (key in this._zoomKeys) {
 				const requestedZoom = map.getZoom() + (ev.shiftKey ? 3 : 1) * this._zoomKeys[key];
-				if (!OverviewFade.handleZoomBeyondLimit(requestedZoom))
-					map.setZoom(requestedZoom, null, true /* animate? */);
+				app.zoomControl.zoomTo(requestedZoom, undefined, true);
 			}
 			else if (ev.key && ev.key.length === 1 && !ev.ctrlKey && !ev.altKey && !map.isEditMode()) {
 				map.uiManager.showViewModeAttention();

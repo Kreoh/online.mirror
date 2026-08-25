@@ -886,7 +886,10 @@ class UIManager extends window.L.Control {
 		});
 		this.map.on('backstagehide', () => {
 			setTimeout(() => {
-				this.map.invalidateSize(); // triggers Leaflet layout recalculation
+				// Backstage toggled #document-container visibility; recalc the
+				// layout via the resize handler (onResize resizes the canvas and
+				// rebuilds the viewed rectangle).
+				app.events.fire('resize', {});
 				const docLayer = this.map._docLayer;
 				if (docLayer && docLayer._docType === 'spreadsheet') {
 					docLayer._resetClientVisArea();
@@ -1650,7 +1653,7 @@ class UIManager extends window.L.Control {
 		if (app.UI.horizontalRuler) app.UI.horizontalRuler.show();
 		if (app.UI.verticalRuler) app.UI.verticalRuler.show();
 
-		$('#map').addClass('hasruler');
+		$('#document-container').addClass('hasruler');
 		this.setDocTypePref('ShowRuler', true);
 		this.map.fire('rulerchanged');
 
@@ -1668,7 +1671,7 @@ class UIManager extends window.L.Control {
 		if (app.UI.horizontalRuler) app.UI.horizontalRuler.hide();
 		if (app.UI.verticalRuler) app.UI.verticalRuler.hide();
 
-		$('#map').removeClass('hasruler');
+		$('#document-container').removeClass('hasruler');
 		this.setDocTypePref('ShowRuler', false);
 
 		if (app.sectionContainer

@@ -15,7 +15,7 @@
 // docLayer._partDimensions; falls back to uniform (_partWidthTwips,
 // _partHeightTwips) when the per-part array is empty.
 
-class ViewLayoutFileBased extends ViewLayoutNewBase {
+class ViewLayoutFileBased extends ViewLayoutBase {
 	public readonly type: string = 'ViewLayoutFileBased';
 	public documentRectangles = Array<cool.SimpleRectangle>();
 	public viewRectangles = Array<cool.SimpleRectangle>();
@@ -23,8 +23,7 @@ class ViewLayoutFileBased extends ViewLayoutNewBase {
 	constructor() {
 		super();
 
-		app.events.on('resize', this.reset.bind(this));
-		app.map.on('zoomend', this.reset.bind(this));
+		app.map.on('zoomend', this.reset, this);
 
 		// Populate rectangles synchronously so callers that read documentRectangles
 		// right after `new ViewLayoutFileBased()` (e.g. paint paths kicked off
@@ -32,6 +31,14 @@ class ViewLayoutFileBased extends ViewLayoutNewBase {
 		this.resetViewLayout();
 		app.layoutingService.appendLayoutingTask(() => this.updateViewData());
 	}
+
+	public override dispose(): void {
+		app.map.off('zoomend', this.reset, this);
+		super.dispose();
+	}
+
+	// No onResize override: the inherited ViewLayout.onResize calls the doc
+	// layer's _syncTileContainerSize, whose tail resets this file-based layout.
 
 	private getPartCount(): number {
 		const docLayer = app.map._docLayer;
@@ -103,6 +110,32 @@ class ViewLayoutFileBased extends ViewLayoutNewBase {
 			Math.round(cumulativeY * app.twipsToPixels),
 			canvasSize[1],
 		);
+
+		// Comment-free stacked extent; comment overflow is applied on top via
+		// ensureViewSizeCoversComments.
+		this._baseViewSize = this._viewSize.clone();
+	}
+
+	protected override getBaseViewSize(): cool.SimplePoint {
+		return this._baseViewSize;
+	}
+
+	// Total horizontal empty space around the centered page column, used by the
+	// comment section to place comments in the side margin (same model as
+	// ViewLayoutMultiPage). Reads the comment-free base extent so the comment width
+	// decision does not feed back through viewSize.
+	public getTotalSideSpace(): number {
+		const maxX = this.viewRectangles.reduce(
+			(result, current) => Math.max(current.pX2, result),
+			0,
+		);
+		const minX = this.viewRectangles.reduce(
+			(result, current) => Math.min(current.pX1, result),
+			100000,
+		);
+		const width = maxX - minX;
+
+		return this._baseViewSize.pX - width;
 	}
 
 	public reset(): void {
@@ -252,54 +285,15 @@ class ViewLayoutFileBased extends ViewLayoutNewBase {
 		this.commitVisibleAreaAndRequestTiles();
 	}
 
-	public override scroll(pX: number, pY: number): boolean {
-		// pX / pY are document-pixel deltas (legacy ViewLayoutBase semantics).
-		// ViewLayoutNewBase.scroll dampens pY by /20, so callers that pass raw
-		// pixel deltas (page-down, wheel, scrollByPoint) would barely scroll.
-		// Apply the delta directly to viewX/viewY and recompute the scrollbar
-		// position from viewSize, matching the scrollVerticalWithOffset path.
-		this.refreshScrollProperties();
-		const documentAnchor = this.getDocumentAnchorSection();
-		let scrolled = false;
-
-		if (pX !== 0 && this.canScrollHorizontal(documentAnchor)) {
-			const max = Math.max(0, this._viewSize.pX - documentAnchor.size[0]);
-			const newViewX = Math.max(
-				0,
-				Math.min(this.scrollProperties.viewX + pX, max),
-			);
-			if (newViewX !== this.scrollProperties.viewX) {
-				this.scrollProperties.viewX = newViewX;
-				this.scrollProperties.startX = Math.round(
-					(this.scrollProperties.viewX / this._viewSize.pX) *
-						this.scrollProperties.horizontalScrollLength,
-				);
-				scrolled = true;
-			}
-		}
-
-		if (pY !== 0 && this.canScrollVertical(documentAnchor)) {
-			const max = Math.max(0, this._viewSize.pY - documentAnchor.size[1]);
-			const newViewY = Math.max(
-				0,
-				Math.min(this.scrollProperties.viewY + pY, max),
-			);
-			if (newViewY !== this.scrollProperties.viewY) {
-				this.scrollProperties.viewY = newViewY;
-				this.scrollProperties.startY = Math.round(
-					(this.scrollProperties.viewY / this._viewSize.pY) *
-						this.scrollProperties.verticalScrollLength,
-				);
-				scrolled = true;
-			}
-		}
-
-		if (scrolled) {
-			this.updateViewData();
-			app.sectionContainer.requestReDraw();
-			app.map._docLayer._checkSelectedPart();
-		}
-
+	// The direct-delta scroll now lives in ViewLayoutBase; here we only add
+	// the file-based follow-up of recomputing which part is selected.
+	public override scroll(
+		pX: number,
+		pY: number,
+		userIsScrolling: boolean = false,
+	): boolean {
+		const scrolled = super.scroll(pX, pY, userIsScrolling);
+		if (scrolled) app.map._docLayer._checkSelectedPart();
 		return scrolled;
 	}
 

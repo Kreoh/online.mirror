@@ -45,13 +45,6 @@ class MouseControl extends CanvasSectionObject {
 	touchstart: number = 0;
 	previousViewedRectangle: cool.SimpleRectangle | null = null; // To check if we hit the borders of document.
 
-	pinchStartCenter: any;
-	zoom: any;
-	// The pinch zoom level before clamping to the allowed zoom range.
-	pinchRequestedZoom: number | undefined;
-	origCenter: any;
-	pinchLength: number = 0;
-
 	constructor(name: string) {
 		super(name);
 	}
@@ -692,116 +685,18 @@ class MouseControl extends CanvasSectionObject {
 		this.clickCount = 0;
 	}
 
+	// Pinch zoom is handled by ZoomControl (a window section that receives the
+	// same multi-touch events). Here we only interrupt an ongoing swipe.
 	onMultiTouchStart(e: TouchEvent): void {
+		void e;
 		if (this.inSwipeAction) this.containerObject.stopAnimating();
-
-		if (e.touches.length !== 2) return;
-
-		const centerX = Math.round(
-			(e.touches[0].clientX + e.touches[1].clientX) * 0.5,
-		);
-		const centerY = Math.round(
-			(e.touches[0].clientY + e.touches[1].clientY) * 0.5,
-		);
-
-		if (isNaN(centerX) || isNaN(centerY)) return;
-
-		this.pinchLength = Math.sqrt(
-			Math.pow(e.touches[0].clientX - e.touches[1].clientX, 2) +
-				Math.pow(e.touches[0].clientY - e.touches[1].clientY, 2),
-		);
-
-		this.pinchStartCenter = { x: centerX, y: centerY };
-		const _pinchStartIntern = app.map.mouseEventToIntern({
-			clientX: centerX,
-			clientY: centerY,
-		});
-		app.map._docLayer.preZoomAnimation(_pinchStartIntern);
 	}
 
-	onMultiTouchMove(
-		point: cool.SimplePoint,
-		dragDistance: number,
-		e: TouchEvent,
-	): void {
-		const centerX = Math.round(
-			(e.touches[0].clientX + e.touches[1].clientX) * 0.5,
-		);
-		const centerY = Math.round(
-			(e.touches[0].clientY + e.touches[1].clientY) * 0.5,
-		);
+	// Click at the given point, so that the insert position is as close to it as possible. The point
+	// is local to this section, in core pixels.
+	public moveCursorToPoint(point: cool.SimplePoint, modifier: number): void {
+		this.refreshPosition(point);
 
-		if (!this.pinchStartCenter || isNaN(centerX) || isNaN(centerY)) return;
-
-		// we need to invert the offset or the map is moved in the opposite direction
-		var offset = {
-			x: centerX - this.pinchStartCenter.x,
-			y: centerY - this.pinchStartCenter.y,
-		};
-		var center = {
-			x: this.pinchStartCenter.x - offset.x,
-			y: this.pinchStartCenter.y - offset.y,
-		};
-
-		const newPinchLength = Math.sqrt(
-			Math.pow(e.touches[0].clientX - e.touches[1].clientX, 2) +
-				Math.pow(e.touches[0].clientY - e.touches[1].clientY, 2),
-		);
-		const diff = newPinchLength - this.pinchLength;
-		this.pinchRequestedZoom = app.map.getZoom() + diff * 0.01;
-		this.zoom = app.map._limitZoom(this.pinchRequestedZoom);
-
-		this.origCenter = app.map.mouseEventToIntern({
-			clientX: center.x,
-			clientY: center.y,
-		});
-
-		if (app.map._docLayer.zoomStep)
-			app.map._docLayer.zoomStep(this.zoom, this.origCenter);
-
-		app.idleHandler.notifyActive();
-	}
-
-	onMultiTouchEnd(e: TouchEvent): void {
-		var oldZoom = app.map.getZoom();
-		var zoomDelta = this.zoom - oldZoom;
-		var finalZoom = app.map._limitZoom(
-			zoomDelta > 0 ? Math.ceil(this.zoom) : Math.floor(this.zoom),
-		);
-
-		if (this.pinchRequestedZoom !== undefined) {
-			OverviewFade.handleZoomBeyondLimit(
-				this.pinchRequestedZoom > oldZoom
-					? Math.ceil(this.pinchRequestedZoom)
-					: Math.floor(this.pinchRequestedZoom),
-			);
-			this.pinchRequestedZoom = undefined;
-		}
-
-		this.pinchStartCenter = undefined;
-
-		if (app.map._docLayer.zoomStepEnd) {
-			app.map._docLayer.zoomStepEnd(
-				finalZoom,
-				this.origCenter,
-				function (newMapCenter: any) {
-					// mapUpdater
-					app.map.setView(newMapCenter, finalZoom);
-				},
-				// showMarkers
-				function () {
-					app.map._docLayer.postZoomAnimation();
-				},
-			);
-		}
-	}
-
-	onDrop(position: cool.SimplePoint, e: DragEvent): void {
-		this.refreshPosition(position);
-
-		const modifier = MouseControl.readModifier(e);
-
-		// Move the cursor, so that the insert position is as close to the drop coordinates as possible.
 		this.postCoreMouseEvent(
 			'buttondown',
 			this.currentPosition,
@@ -816,6 +711,10 @@ class MouseControl extends CanvasSectionObject {
 			app.LOButtons.left,
 			modifier,
 		);
+	}
+
+	onDrop(position: cool.SimplePoint, e: DragEvent): void {
+		this.moveCursorToPoint(position, MouseControl.readModifier(e));
 
 		if (app.map._clip && e.dataTransfer) {
 			// Always capture the html content separate as we may lose it when we

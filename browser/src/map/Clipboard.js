@@ -63,7 +63,7 @@ window.L.Clipboard = window.L.Class.extend({
 		div.style.fontSize = '6pt';
 
 		// so we get events to where we want them.
-		var parent = document.getElementById('map');
+		var parent = document.getElementById('document-container');
 		parent.appendChild(div);
 
 		if (window.L.Browser.cypressTest) {
@@ -390,13 +390,11 @@ window.L.Clipboard = window.L.Class.extend({
 					/*keepPopupAlive=*/true,
 				);
 
-				if (this._checkAndDisablePasteSpecial()) {
-					window.app.console.log('up-load done, now .uno:PasteSpecial');
-					app.socket.sendMessage('uno .uno:PasteSpecial');
-				} else {
-					window.app.console.log('up-load done, now .uno:Paste');
-					await this._sendCommandAndWaitForCompletion('.uno:Paste');
-				}
+				const pasteCommand = this._checkAndDisablePasteSpecial()
+					? '.uno:PasteSpecial'
+					: '.uno:Paste';
+				window.app.console.log('up-load done, now ' + pasteCommand);
+				await this._sendCommandAndWaitForCompletion(pasteCommand);
 			} catch (_error) {
 				window.app.console.error('Clipboard: failed to download - error');
 				const uploadErrorMessage = _('Failed to upload the clipboard');
@@ -494,9 +492,7 @@ window.L.Clipboard = window.L.Class.extend({
 	},
 
 	_sendToInternalClipboard: async function (content) {
-		if (window.ThisIsTheiOSApp) {
-			await window.webkit.messageHandlers.clipboard.postMessage(`sendToInternal ${await content.text()}`); // no need to base64 in this direction...
-		} else if (window.ThisIsTheMacOSApp || window.ThisIsTheWindowsApp) {
+		if (window.ThisIsTheiOSApp || window.ThisIsTheMacOSApp || window.ThisIsTheWindowsApp) {
 			// Nothing to send: the engine serves the paste on the following
 			// .uno:Paste, either from our own copy (when we still own the platform
 			// clipboard) or by reading the platform clipboard through the installed
@@ -886,7 +882,7 @@ window.L.Clipboard = window.L.Class.extend({
 
 	// Gets status of a copy/paste command from the remote Kit
     _onCommandResult: function(e) {
-        if (e.commandName === '.uno:Copy' || e.commandName === '.uno:Cut' || e.commandName === '.uno:CopyHyperlinkLocation' || e.commandName === '.uno:CopySlide' || e.commandName === '.uno:Paste') {
+        if (e.commandName === '.uno:Copy' || e.commandName === '.uno:Cut' || e.commandName === '.uno:CopyHyperlinkLocation' || e.commandName === '.uno:CopySlide' || e.commandName === '.uno:Paste' || e.commandName === '.uno:PasteSpecial') {
 			window.app.console.log('Resolve clipboard command promise ' + e.commandName
 				+ ' with queue length: ' + this._commandCompletion.length);
 			while (this._commandCompletion.length > 0)
@@ -898,7 +894,7 @@ window.L.Clipboard = window.L.Class.extend({
 	},
 
 	_sendCommandAndWaitForCompletion: function(command, params) {
-		if (command !== '.uno:Copy' && command !== '.uno:Cut' && command !== '.uno:CopyHyperlinkLocation' && command !== '.uno:CopySlide' && command !== '.uno:Paste') {
+		if (command !== '.uno:Copy' && command !== '.uno:Cut' && command !== '.uno:CopyHyperlinkLocation' && command !== '.uno:CopySlide' && command !== '.uno:Paste' && command !== '.uno:PasteSpecial') {
 			console.error(`_sendCommandAndWaitForCompletion was called with '${command}', but anything except Copy/Cut/Paste will never complete`);
 			return null;
 		}
@@ -971,21 +967,10 @@ window.L.Clipboard = window.L.Class.extend({
 		// I don't like it either :). If you change this make sure to thoroughly test
 		// cross-browser and cross-device!
 
-		if (window.ThisIsTheiOSApp) {
-			// This is sent down the fakewebsocket which can race with the
-			// native message - so first step is to wait for the result of
-			// that command so we are sure the clipboard is set before
-			// fetching it.
-			if (await check_ === null)
-				return; // Either wrong command or a pending event.
-
-			await window.webkit.messageHandlers.clipboard.postMessage(`write`);
-		} else if (window.ThisIsTheMacOSApp || window.ThisIsTheWindowsApp) {
-			// On macOS and Windows we advertise the clipboard lazily: when the copy
-			// completes the engine reports the available formats through the
-			// clipboardmimetypes message, and the native side puts those formats on the
-			// pasteboard and fetches the bytes only when something pastes them. So
-			// there is no eager write to make here; just confirm the copy went through.
+		if (window.ThisIsTheiOSApp || window.ThisIsTheMacOSApp || window.ThisIsTheWindowsApp) {
+			// The engine advertises the copied formats straight onto the system
+			// clipboard through the installed clipboard provider, so there is no
+			// write to make here; just confirm the copy went through.
 			await check_;
 		} else {
 			const mimeTypes = this._copyAsMarkdown ? 'text/markdown;charset=utf-8' : 'text/html,text/plain;charset=utf-8';
@@ -1104,50 +1089,15 @@ window.L.Clipboard = window.L.Class.extend({
 		return true;
 	},
 
-	_MobileAppReadClipboard: function(encodedClipboardData) {
-		if (encodedClipboardData === "(internal)") {
-			return null;
-		}
-
-		const clipboardData = Array.from(
-			encodedClipboardData.split(' '),
-		).map((encoded) =>
-			(encoded === '(null)' ? '' : window.b64d(encoded)),
-		);
-
-		const dataByMimeType = {};
-
-		if (clipboardData[0]) {
-			dataByMimeType['text/plain'] = new Blob([clipboardData[0]]);
-		}
-
-		if (clipboardData[1]) {
-			dataByMimeType['text/html'] = new Blob([clipboardData[1]]);
-		}
-
-		if (Object.keys(dataByMimeType).length === 0) {
-			return [];
-		}
-
-		return [new ClipboardItem(dataByMimeType)];
-	},
-
-	_iOSReadClipboard: async function() {
-		const encodedClipboardData = await window.webkit.messageHandlers.clipboard.postMessage('read');
-		return this._MobileAppReadClipboard(encodedClipboardData);
-	},
-
-	// Read clipboard items, routing through the native bridge on the CODA/mobile
-	// apps and the dummy clipboard under cypress. Returns a ClipboardItem array,
-	// or null when the native app reports an internal copy ("(internal)").
+	// Read clipboard items, using the dummy clipboard under cypress. Returns a
+	// ClipboardItem array, or null on the apps whose engine reads the system
+	// clipboard itself.
 	_readClipboardItems: async function() {
-		if (window.ThisIsTheMacOSApp || window.ThisIsTheWindowsApp)
+		if (window.ThisIsTheiOSApp || window.ThisIsTheMacOSApp || window.ThisIsTheWindowsApp)
 			// The engine clipboard provider reads the pasteboard itself on
 			// .uno:Paste, so there is nothing to fetch here. Reporting null
 			// drops straight to an internal paste.
 			return null;
-		if (window.ThisIsTheiOSApp)
-			return this._iOSReadClipboard();
 		const clipboard = window.L.Browser.cypressTest ? this._dummyClipboard : navigator.clipboard;
 		return clipboard.read();
 	},
@@ -1369,6 +1319,13 @@ window.L.Clipboard = window.L.Class.extend({
 				return false;
 			}
 
+			if (window.ThisIsTheiOSApp) {
+				// The engine reads the system pasteboard itself, through the
+				// installed clipboard provider.
+				this._doInternalPaste(this._map, ev.usePasteKeyEvent);
+				return false;
+			}
+
 			var usePasteKeyEvent = ev.usePasteKeyEvent;
 			// Always capture the html content separate as we may lose it when we
 			// pass the clipboard data to a different context (async calls, f.e.).
@@ -1552,7 +1509,7 @@ window.L.Clipboard = window.L.Class.extend({
 	},
 
 	_substProductName: function (msg) {
-		var productName = (typeof brandProductName !== 'undefined') ? brandProductName : 'Collabora Online Development Edition (unbranded)';
+		var productName = (typeof brandProductName !== 'undefined') ? brandProductName : 'Online Office';
 		return msg.replace('{productname}', productName);
 	},
 

@@ -387,7 +387,6 @@ public:
     bool HasValidSignatures() const;
     SignatureState              GetDocumentSignatureState();
     void SignDocumentContent(weld::Window* pDialogParent, const std::function<void(bool)>& rCallback);
-    void AfterSignContent(bool bHaveWeSigned, weld::Window* pDialogParent);
     cpo::uno::Sequence<css::security::DocumentSignatureInformation> GetDocumentSignatureInformation(
         bool bScriptingContent,
         const css::uno::Reference<css::security::XDocumentDigitalSignatures>& xSigner
@@ -758,7 +757,7 @@ public:
     SAL_DLLPRIVATE void CheckForBrokenDocSignatures_Impl();
     SAL_DLLPRIVATE void CheckEncryption_Impl( const css::uno::Reference< css::task::XInteractionHandler >& xHandler );
     SAL_DLLPRIVATE void SetModifyPasswordEntered( bool bEntered = true );
-    SAL_DLLPRIVATE bool IsModifyPasswordEntered() const;
+    bool IsModifyPasswordEntered() const;
 
     SAL_DLLPRIVATE void InitBasicManager_Impl();
     SAL_DLLPRIVATE SfxObjectShell_Impl* Get_Impl() { return pImpl.get(); }

@@ -3,7 +3,7 @@
  * window.L.CanvasTileLayer is a layer with canvas based rendering.
  */
 
-/* global app JSDialog CanvasSectionContainer GraphicSelection CanvasOverlay CursorHeaderSection $ _ CPolyUtil CPolygon Cursor UNOKey cool OtherViewCellCursorSection RenderManager SplitSection TextSelections CellSelectionMarkers URLPopUpSection CalcValidityDropDown DocumentBase CellCursorSection FormFieldButton TextCursorSection CStyleData CSelections CReferences OtherViewGraphicSelectionSection CompareChangesLabelSection InternPointUtil InternBoundsUtil AnimatedGifManager */
+/* global app JSDialog CanvasSectionContainer GraphicSelection CanvasOverlay CursorHeaderSection $ _ CPolyUtil CPolygon Cursor UNOKey cool OtherViewCellCursorSection RenderManager SplitSection TextSelections CellSelectionMarkers URLPopUpSection CalcValidityDropDown DocumentBase CellCursorSection FormFieldButton TextCursorSection CStyleData CSelections CReferences OtherViewGraphicSelectionSection CompareChangesLabelSection AnimatedGifManager */
 
 function clamp(num, min, max)
 {
@@ -29,13 +29,6 @@ window.L.TileSectionManager = window.L.Class.extend({
 			splitPanesContext.getSplitPos() : new cool.Point(0, 0);
 		this._updatesRunning = false;
 
-		var canvasContainer = document.getElementById('document-container');
-		var that = this;
-		this.resObserver = new ResizeObserver(function() {
-			that._layer._syncTileContainerSize();
-		});
-		this.resObserver.observe(canvasContainer);
-
 		this._zoomAtDocEdgeX = true;
 		this._zoomAtDocEdgeY = true;
 	},
@@ -49,7 +42,23 @@ window.L.TileSectionManager = window.L.Class.extend({
 
 	// Details of tile areas to render
 	_paintContext: function() {
-		var viewBounds = this._map.getPixelBoundsCore();
+		// Which tiles are drawn, and where, is anchored to viewBounds. The
+		// layout scrolls itself, not the leaflet map, so read the viewed
+		// rectangle (already in core pixels) so drawing tracks the scroll.
+		var layout = app.activeDocument.activeLayout;
+		var viewBounds;
+		if (this._inZoomAnim && this._zoomStartViewBounds) {
+			// During a zoom the viewed rectangle is driven to intermediate
+			// frame values; anchor the frame and final-center computation to
+			// the gesture's starting bounds instead.
+			viewBounds = this._zoomStartViewBounds;
+		} else {
+			var r = layout.viewedRectangle;
+			viewBounds = new cool.Bounds(
+				new cool.Point(r.pX1, r.pY1),
+				new cool.Point(r.pX1 + r.pWidth, r.pY1 + r.pHeight),
+			);
+		}
 		var splitPanesContext = this._layer.getSplitPanesContext();
 		var paneBoundsList = splitPanesContext ?
 		    splitPanesContext.getPxBoundList(viewBounds) :
@@ -209,160 +218,18 @@ window.L.TileSectionManager = window.L.Class.extend({
 		return {
 			offset: this._offset,
 			topLeft: docTopLeft.add(this._offset),
-			center: this._map.rescale(newPaneCenter, this._map.getZoom(), this._map.getScaleZoom(scale)),
+			center: app.activeDocument.rescale(newPaneCenter, this._map.getZoom(), app.activeDocument.getScaleZoom(scale)),
 		};
 	},
 
-	_getZoomMapCenter: function (zoom) {
-		var scale = this._calcZoomFrameScale(zoom);
-		var ctx = this._paintContext();
-		var splitPos = ctx.splitPos;
-		var viewBounds = ctx.viewBounds;
-		var freePaneBounds = new cool.Bounds(viewBounds.min.add(splitPos), viewBounds.max);
-
-		return this._getZoomDocPos(
-			this._newCenter,
-			this._layer._pinchStartCenter,
-			freePaneBounds,
-			{ freezeX: false, freezeY: false },
-			splitPos,
-			scale,
-			true /* findFreePaneCenter */
-		).center;
-	},
-
-	_zoomAnimation: function () {
-		var painter = this;
-
-		var rafFunc = function (timeStamp, final) {
-			painter._layer._refreshRowColumnHeaders();
-
-			// Redraw the section container each frame. The tiles section paints
-			// the scaled zoom frame from its own onDraw, and the overlay and
-			// document sections follow in the same pass instead of freezing.
-			app.sectionContainer.requestReDraw();
-
-			if (!final)
-				painter._zoomRAF = requestAnimationFrame(rafFunc);
-		};
-		this.rafFunc = rafFunc;
-		rafFunc();
-	},
-
-	_calcZoomFrameScale: function (zoom) {
-		zoom = this._layer._map._limitZoom(zoom);
-		var origZoom = this._layer._map.getZoom();
-		// Compute relative-multiplicative scale of this zoom-frame w.r.t the starting zoom(ie the current Map's zoom).
-		return this._layer._map.zoomToFactor(zoom - origZoom + this._layer._map.options.zoom);
-	},
-
-	_calcZoomFrameParams: function (zoom, newCenter) {
-		this._zoomFrameScale = this._calcZoomFrameScale(zoom);
-		this._newCenter = this._layer._map.project(newCenter).multiplyBy(app.dpiScale); // in core pixels
-	},
-
-	setWaitForTiles: function (wait) {
-		this._waitForTiles = wait;
-	},
-
-	waitForTiles: function () {
-		return this._waitForTiles;
-	},
-
-	zoomStep: function (zoom, newCenter) {
-		if (this._finishingZoom) // finishing steps of animation still going on.
-			return;
-
-		this._calcZoomFrameParams(zoom, newCenter);
-
-		if (!this._inZoomAnim) {
-			app.sectionContainer.setInZoomAnimation(true);
-			this._inZoomAnim = true;
-			// Start RAF loop for zoom-animation
-			this._zoomAnimation();
-		}
-	},
-
-	zoomStepEnd: function (zoom, newCenter, mapUpdater, runAtFinish, noGap) {
-
-		if (!this._inZoomAnim || this._finishingZoom)
-			return;
-
-		this._finishingZoom = true;
-
-		this._map.disableTextInput();
-		// Do a another animation from current non-integral log-zoom to
-		// the final integral zoom, but maintain the same center.
-		var steps = 10;
-		var stepId = noGap ? steps : 0;
-
-		var startZoom = this._zoomFrameScale;
-		var endZoom = this._calcZoomFrameScale(zoom);
-		var painter = this;
-		var map = this._map;
-
-		// Calculate the final center at final zoom in advance.
-		var newMapCenter = this._getZoomMapCenter(zoom).divideBy(app.dpiScale);
-		var newMapCenterIntern = map.unproject(newMapCenter, zoom);
-		app.sectionContainer.setZoomChanged(true);
-
-		var stopAnimation = noGap ? true : false;
-		var waitForTiles = false;
-		var waitTries = 30;
-		var finishingRAF = undefined;
-
-		var finishAnimation = function () {
-
-			if (stepId < steps) {
-				// continue animating till we reach "close" to 'final zoom'.
-				painter._zoomFrameScale = startZoom + (endZoom - startZoom) * stepId / steps;
-				stepId += 1;
-				if (stepId >= steps)
-					stopAnimation = true;
-			}
-
-			if (stopAnimation) {
-				stopAnimation = false;
-				cancelAnimationFrame(painter._zoomRAF);
-				painter._calcZoomFrameParams(zoom, newCenter);
-				// Draw one last frame at final zoom.
-				painter.rafFunc(undefined, true /* final? */);
-				painter._zoomFrameScale = undefined;
-				app.sectionContainer.setInZoomAnimation(false);
-				painter._inZoomAnim = false;
-
-				painter.setWaitForTiles(true);
-				// Set view and paint the tiles if all available.
-				mapUpdater(newMapCenterIntern);
-				waitForTiles = true;
-			}
-
-			if (waitForTiles) {
-				// Wait until we get all tiles or wait time exceeded.
-				if (waitTries <= 0 || painter._tilesSection.haveAllTilesInView()) {
-					// All done.
-					waitForTiles = false;
-					cancelAnimationFrame(finishingRAF);
-					painter.setWaitForTiles(false);
-					app.sectionContainer.setZoomChanged(false);
-					map.enableTextInput();
-					map.focus(map.canAcceptKeyboardInput());
-					// Paint everything.
-					app.sectionContainer.requestReDraw();
-					// Don't let a subsequent pinchZoom start before finishing all steps till this point.
-					painter._finishingZoom = false;
-					// Run the finish callback.
-					runAtFinish();
-					return;
-				}
-				else
-					waitTries -= 1;
-			}
-
-			finishingRAF = requestAnimationFrame(finishAnimation);
-		};
-
-		finishAnimation();
+	// The current zoom-frame scale (frame twips->px relative to the zoom
+	// start). Owned by ZoomControl, which publishes the effective and base
+	// twips->px into the tiles section.
+	zoomFrameScale: function () {
+		var props = this._tilesSection && this._tilesSection.sectionProperties;
+		if (props && props.effectiveTwipsToPixels && props.zoomBaseTwipsToPixels)
+			return props.effectiveTwipsToPixels / props.zoomBaseTwipsToPixels;
+		return undefined;
 	},
 
 	getTileSectionPos : function () {
@@ -514,7 +381,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			RenderManager.update();
 		}, this);
 		this._map.on('sheetgeometrychanged', this._painter.update, this._painter);
-		this._map.on('move', this._syncTilePanePos, this);
 
 		this._map.on('viewrowcolumnheaders', this._painter.update, this._painter);
 		this._map.on('messagesdone', RenderManager.sendProcessedResponse, RenderManager);
@@ -603,7 +469,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			this._tileZoom = tileZoom;
 			if (tileZoomChanged) {
 				this._updateTileTwips();
-				this._updateMaxBounds();
+				this._updateScrollLimits();
 			}
 
 			if (app.tile.size.x === 0 || app.tile.size.y === 0) {
@@ -614,7 +480,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			}
 
 			if (!window.L.Browser.mobileWebkit)
-				RenderManager.update(this._map.getCenter(), tileZoom);
+				RenderManager.update(tileZoom);
 
 			if (tileZoomChanged)
 				RenderManager.pruneTiles();
@@ -661,36 +527,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			this._syncTileContainerSize();
 	},
 
-	_checkSpreadSheetBounds: function (newZoom) {
-		// for spreadsheets, when the document is smaller than the viewing area
-		// we want it to be glued to the row/column headers instead of being centered
-		// In the future we probably want to remove this and set the bonds only on the
-		// left/upper side of the spreadsheet so that we can have an 'infinite' number of
-		// cells downwards and to the right, like we have on desktop
-		var viewSize = this._map.getSize();
-		var scale = this._map.getZoomScale(newZoom);
-		var width = app.activeDocument.fileSize.x / app.tile.size.x * RenderManager.tileSize * scale;
-		var height = app.activeDocument.fileSize.y / app.tile.size.y * RenderManager.tileSize * scale;
-		if (width < viewSize.x || height < viewSize.y) {
-			// if after zoomimg the document becomes smaller than the viewing area
-			width = Math.max(width, viewSize.x);
-			height = Math.max(height, viewSize.y);
-			if (!this._map.options._origMaxBounds) {
-				this._map.options._origMaxBounds = this._map.options.maxBounds;
-			}
-			scale = InternPointUtil.scale(1);
-			this._map.setMaxBounds(InternBoundsUtil.flexConstruct(
-				this._map.unproject(new cool.Point(0, 0)),
-				this._map.unproject(new cool.Point(width * scale, height * scale))));
-		}
-		else if (this._map.options._origMaxBounds) {
-			// if after zoomimg the document becomes larger than the viewing area
-			// we need to restore the initial bounds
-			this._map.setMaxBounds(this._map.options._origMaxBounds);
-			this._map.options._origMaxBounds = null;
-		}
-	},
-
 	_moveStart: function () {
 		RenderManager.resetPreFetching();
 		this._moveInProgress = true;
@@ -709,15 +545,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 
 		RenderManager.update();
 		RenderManager.resetPreFetching(true);
-	},
-
-	_isInternInView: function (position) {
-		var centerOffset = this._map._getCenterOffset(position);
-		var viewHalf = this._map.getSize()._divideBy(2);
-		var positionInView =
-			centerOffset.x > -viewHalf.x && centerOffset.x < viewHalf.x &&
-			centerOffset.y > -viewHalf.y && centerOffset.y < viewHalf.y;
-		return positionInView;
 	},
 
 	_moveEnd: function () {
@@ -741,7 +568,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		    'tiletwipwidth=' + app.tile.size.x + ' ' +
 		    'tiletwipheight=' + app.tile.size.y + ' ' +
 		    'dpiscale=' + window.devicePixelRatio + ' ' +
-		    'zoompercent=' + this._map.getZoomPercent()
+		    'zoompercent=' + app.activeDocument.getZoomPercent()
 
 		if (this._clientZoom !== newClientZoom || forceUpdate || this.isImpress()) {
 			// the zoom level has changed
@@ -1334,8 +1161,8 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			const strZoomPercent = payload.match(/\d+/);
 			const zoomPercent = strZoomPercent ? parseInt(strZoomPercent[0], 10) : NaN;
 			if (zoomPercent) {
-				const zoomIndex = this._map.getZoomIndex(zoomPercent);
-				this._map.setZoom(zoomIndex, null, false);
+				const zoomIndex = app.activeDocument.getZoomIndex(zoomPercent);
+				app.activeDocument.activeLayout.applyZoom(zoomIndex);
 			}
 		}
 	},
@@ -2685,8 +2512,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			if (!this._map.wholeColumnSelected && !this._map.wholeRowSelected) {
 				const address = document.querySelector('#addressInput input').value;
 				if (!this._isWholeColumnSelected(address) && !this._isWholeRowSelected(address)) {
-					// Reset previous scroll for cell selection message. Because cell selection already includes latest position (shouldn't accumulate).
-					app.activeDocument.activeLayout.scrollProperties.moveBy = null;
 					app.activeDocument.activeLayout.scroll(scrollX, scrollY);
 				}
 			}
@@ -3102,10 +2927,13 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			return;
 		}
 
-		if (pos instanceof cool.SimplePoint) // Turn into lat/lng if required (pos may also be a simplePoint.).
-			pos = this._twipsToIntern({ x: pos.x, y: pos.y });
-
-		var center = this._map.project(pos);
+		var center;
+		if (pos instanceof cool.SimplePoint)
+			// twips -> CSS pixels directly. This used to round-trip through the
+			// CRS as project(_twipsToIntern(pos)), which cancels out.
+			center = this._twipsToCssPixels({ x: pos.x, y: pos.y });
+		else
+			center = app.activeDocument.project(pos); // intern (CRS) point
 
 		let needsXScroll = false;
 		let needsYScroll = false;
@@ -3115,7 +2943,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		if (app.isXVisibleInTheDisplayedArea(Math.round(center.x * CSSPixelsToTwips)))
 			center.x = app.activeDocument.activeLayout.viewedRectangle.cX1;
 		else {
-			center.x -= this._map.getSize().divideBy(2).x;
+			center.x -= app.activeDocument.activeLayout.frameSize.cX / 2;
 			center.x = Math.round(center.x < 0 ? 0 : center.x);
 			needsXScroll = true;
 		}
@@ -3130,7 +2958,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		if (app.isYVisibleInTheDisplayedArea(Math.round(controlYDown * CSSPixelsToTwips)) && app.isYVisibleInTheDisplayedArea(Math.round(controlYUp * CSSPixelsToTwips)))
 			center.y = app.activeDocument.activeLayout.viewedRectangle.cY1;
 		else {
-			center.y -= this._map.getSize().divideBy(2).y;
+			center.y -= app.activeDocument.activeLayout.frameSize.cY / 2;
 			center.y = Math.round(center.y < 0 ? 0 : center.y);
 			needsYScroll = true;
 		}
@@ -3215,10 +3043,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		this._updateCursorAndOverlay();
 
 		TextCursorSection.updateVisibilities();
-	},
-
-	activateCursor: function () {
-		this._replayPrintTwipsMsg('invalidatecursor');
 	},
 
 	// enable or disable blinking cursor and the cursor overlay depending on
@@ -3397,30 +3221,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		app.activeDocument.activeView.clearTextSelection();
 	},
 
-	// A drag that carries this type is a slide preview being reordered in
-	// the slide sorter; the document area takes no drops from it.
-	_isSlideDrag: function (e) {
-		return e.dataTransfer && e.dataTransfer.types &&
-			Array.prototype.indexOf.call(e.dataTransfer.types, 'application/x-cool-slide') !== -1;
-	},
-
-	_onDragOver: function (e) {
-		e = e.originalEvent;
-		if (this._isSlideDrag(e))
-			return;
-		e.preventDefault();
-	},
-
-	// Move the cursor, so that the insert position is as close to the drop coordinates as possible.
-	_moveCursorToDropPoint: function (intern) {
-		const mousePos = this._internToTwips(intern);
-		const count = 1;
-		const buttons = 1;
-		const modifier = this._map.keyboard.modifier;
-		this._postMouseEvent('buttondown', mousePos.x, mousePos.y, count, buttons, modifier);
-		this._postMouseEvent('buttonup', mousePos.x, mousePos.y, count, buttons, modifier);
-	},
-
 	// Insert a file that the app received as a drag and drop from the desktop, at the point where it
 	// was dropped. The bytes arrive base64-encoded, as the bridge from the app carries strings only,
 	// and the point arrives in physical pixels relative to the app window. The web view covers the
@@ -3433,32 +3233,18 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 
 		if (x >= 0 && y >= 0) {
 			const scale = window.devicePixelRatio || 1;
-			const containerRect = this._map._container.getBoundingClientRect();
-			const containerPoint = new cool.Point(
-				x / scale - containerRect.left, y / scale - containerRect.top);
-			this._moveCursorToDropPoint(
-				this._map.layerPointToIntern(this._map.containerPointToLayerPoint(containerPoint)));
+			const canvasRectangle = app.sectionContainer.getCanvasBoundingClientRect();
+			const documentAnchor = app.sectionContainer.getDocumentAnchor();
+			// The mouse control section starts at the document anchor, so subtract it to get the
+			// point in that section's own coordinates.
+			const point = cool.SimplePoint.fromCorePixels([
+				(x / scale - canvasRectangle.left) * app.dpiScale - documentAnchor[0],
+				(y / scale - canvasRectangle.top) * app.dpiScale - documentAnchor[1]]);
+			app.activeDocument.mouseControl.moveCursorToPoint(point, this._map.keyboard.modifier);
 		}
 
 		const bytes = Uint8Array.from(window.atob(base64Data), (c) => c.charCodeAt(0));
 		this._map._clip._asyncReadPasteFile(new File([bytes], name, { type: mimetype }));
-	},
-
-	_onDrop: function (e) {
-		if (this._isSlideDrag(e.originalEvent))
-			return;
-
-		this._moveCursorToDropPoint(e.intern);
-
-		e = e.originalEvent;
-		e.preventDefault();
-
-		if (this._map._clip) {
-			// Always capture the html content separate as we may lose it when we
-			// pass the clipboard data to a different context (async calls, f.e.).
-			var htmlText = e.dataTransfer.getData('text/html');
-			this._map._clip.dataTransferToDocument(e.dataTransfer, /* preferInternal = */ false, htmlText);
-		}
 	},
 
 	/* in impress, we always recalculate zoom on resize to keep the slide in-view.
@@ -3510,7 +3296,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		const xRatio = availW / documentWidth;
 		const yRatio = availH / documentHeight;
 		const ratio = Math.min(xRatio, yRatio);
-		return this._map.getScaleZoom(ratio);
+		return app.activeDocument.getScaleZoom(ratio);
 	},
 
 	_writerDynamicZoom: function(containerWidth, documentWidth, bringCommentsIntoView) {
@@ -3518,7 +3304,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		if (bringCommentsIntoView && commentSection)
 			containerWidth -= commentSection.sectionProperties.commentWidth;
 		const ratio = containerWidth / documentWidth;
-		return this._map.getScaleZoom(ratio);
+		return app.activeDocument.getScaleZoom(ratio);
 	},
 
 	_recalcZoom: function(newSize, bringCommentsIntoView, maxZoom) {
@@ -3556,8 +3342,9 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		if (this._map.uiManager.getStartCompareChanges()) // comparechanges view, don't zoom in, to have space for two pages side by side.
 			return;
 
-		var oldSize = e && e.oldSize ? e.oldSize : this._map.getSize();
-		var newSize = e && e.newSize ? e.newSize : this._map.getSize();
+		const frame = app.activeDocument.activeLayout.frameSize;
+		var oldSize = e && e.oldSize ? e.oldSize : new cool.Point(frame.cX, frame.cY);
+		var newSize = e && e.newSize ? e.newSize : new cool.Point(frame.cX, frame.cY);
 		newSize.x *= app.dpiScale;
 		newSize.y *= app.dpiScale;
 		oldSize.x *= app.dpiScale;
@@ -3617,7 +3404,7 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		if (zoom > 1)
 			zoom = Math.floor(zoom);
 
-		this._map.setZoom(zoom, {animate: false});
+		app.activeDocument.activeLayout.applyZoom(zoom);
 	},
 
 	// Cells can change position during changes of zoom level in calc
@@ -3888,22 +3675,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		}.bind(this));
 	},
 
-	_syncTilePanePos: function () {
-		if (this._container) {
-			var mapPanePos = this._map._getMapPanePos();
-			window.L.DomUtil.setPosition(this._container, new cool.Point(-mapPanePos.x , -mapPanePos.y));
-		}
-		var documentBounds = this._map.getPixelBoundsCore();
-		var documentPos = documentBounds.min;
-		var documentEndPos = documentBounds.max;
-
-		const size = [documentEndPos.x - documentPos.x, documentEndPos.y - documentPos.y];
-
-		app.activeDocument.activeLayout.viewedRectangle = new cool.SimpleRectangle(
-			documentPos.x * app.pixelsToTwips, documentPos.y * app.pixelsToTwips, size[0] * app.pixelsToTwips, size[1] * app.pixelsToTwips
-		);
-	},
-
 	pauseDrawing: function () {
 		if (this._painter && app.sectionContainer)
 			app.sectionContainer.pauseDrawing();
@@ -3962,36 +3733,10 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		}
 	},
 
-	_getTilesSectionRectangle: function () {
-		var section = app.sectionContainer.getSectionWithName(app.CSections.Tiles.name);
-		if (section) {
-			return app.LOUtil.createRectangle(section.myTopLeft[0] / app.dpiScale, section.myTopLeft[1] / app.dpiScale, section.size[0] / app.dpiScale, section.size[1] / app.dpiScale);
-		}
-		else {
-			return app.LOUtil.createRectangle(0, 0, 0, 0);
-		}
-	},
-
-	_getRealMapSize: function() {
-		this._map._sizeChanged = true; // force using real size
-		return this._map.getPixelBounds().getSize();
-	},
-
 	_getDocumentContainerSize: function() {
 		let documentContainerSize = document.getElementById('document-container').getBoundingClientRect();
 		documentContainerSize = [documentContainerSize.width, documentContainerSize.height];
 		return documentContainerSize;
-	},
-
-	_resizeMapElementAndTilesLayer: function(sizeRectangle) {
-		const mapElement = document.getElementById('map'); // map's size = tiles section's size.
-		mapElement.style.left = sizeRectangle.getPxX1() + 'px';
-		mapElement.style.top = sizeRectangle.getPxY1() + 'px';
-		mapElement.style.width = sizeRectangle.getPxWidth() + 'px';
-		mapElement.style.height = sizeRectangle.getPxHeight() + 'px';
-
-		this._container.style.width = sizeRectangle.getPxWidth() + 'px';
-		this._container.style.height = sizeRectangle.getPxHeight() + 'px';
 	},
 
 	_mobileChecksAfterResizeEvent: function(heightIncreased) {
@@ -4018,10 +3763,12 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		const hasVisibleCursor = app.file.textCursor.visible
 			&& this._map._docLayer._cursorMarker && this._map._docLayer._cursorMarker.isDomAttached();
 		if (hasVisibleCursor) {
-			const cursorPos = this._map._docLayer._twipsToIntern({ x: app.file.textCursor.rectangle.x1, y: app.file.textCursor.rectangle.y2 });
-			const cursorPositionInView = this._isInternInView(cursorPos);
-			if (!cursorPositionInView)
-				this._map.panTo(cursorPos);
+			const cursor = app.file.textCursor.rectangle;
+			const view = app.activeDocument.activeLayout.viewedRectangle;
+			if (!view.containsPoint([cursor.x1, cursor.y2]))
+				app.activeDocument.activeLayout.scrollTo(
+					cursor.pX1 - view.pWidth / 2,
+					cursor.pY2 - view.pHeight / 2);
 		}
 		// In Calc a cell is selected for typing without an active caret cursor. The
 		// keyboard is up, so scroll the sheet to keep the selected cell visible.
@@ -4036,31 +3783,33 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 	_syncTileContainerSize: function () {
 		if (!this._map) return;
 
+		// Impress/Draw lay out their mobile presentation chrome here (moving the
+		// slide sorter out of the flex so document-container gets its height). It
+		// must run for every Impress layout - the edit view (ViewLayoutImpress) AND
+		// the read-only/mobile fileBasedView (ViewLayoutFileBased) - and for the
+		// canvas-size safety net which calls this directly, so keep it here rather
+		// than in a single layout's onResize.
 		if (this.isImpress() || this.isDraw()) this.onResizeImpress();
 
 		if (!this._container) return;
 
+		// Remember the visible frame across the relayout to detect growth.
+		const oldFrame = app.activeDocument.activeLayout.frameSize;
+
 		const documentContainerSize = this._getDocumentContainerSize();
 
-		app.sectionContainer.onResize(documentContainerSize[0], documentContainerSize[1]); // Canvas's size = documentContainer's size.
+		// Canvas matches the document container. The map element is CSS-sized
+		// (absolute inset:0) and is no longer resized here; the layout rebuilds
+		// its viewed rectangle from the new frame in ViewLayout.onResize.
+		app.sectionContainer.onResize(documentContainerSize[0], documentContainerSize[1]);
 
-		const oldSize = this._getRealMapSize();
-
-		this._resizeMapElementAndTilesLayer(this._getTilesSectionRectangle());
-
-		const newSize = this._getRealMapSize();
-		const heightIncreased = oldSize.y < newSize.y;
-		const widthIncreased = oldSize.x < newSize.x;
-
-		if (oldSize.x !== newSize.x || oldSize.y !== newSize.y)
-			this._map.invalidateSize(false, oldSize);
+		const frame = app.activeDocument.activeLayout.frameSize;
+		const heightIncreased = oldFrame.pY < frame.pY;
+		const widthIncreased = oldFrame.pX < frame.pX;
 
 		this._mobileChecksAfterResizeEvent(heightIncreased);
 
 		this._fitWidthZoom();
-
-		// Center the view w.r.t the new map-pane position using the current zoom.
-		this._map.setView(this._map.getCenter());
 
 		this._nonDesktopChecksAfterResizeEvent(heightIncreased);
 
@@ -4092,10 +3841,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		return false;
 	},
 
-	setZoomChanged: function (zoomChanged) {
-		app.sectionContainer.setZoomChanged(zoomChanged);
-	},
-
 	setInitialZoom: function (map) {
 		if (this.isWriter()) {
 			let zoom;
@@ -4118,9 +3863,10 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 			this._firstFitDone = true;
 			if (this._partHasComments)
 				this._includedCommentsInFirstFit = true;
-			map.setZoom(zoom, {animate: false});
+			app.activeDocument.activeLayout.applyZoom(zoom);
 		} else  {
-			map.setZoom();
+			// Client zoom if one is already set, else the default option.
+			app.activeDocument.activeLayout.applyZoom(map._clientZoom || map.options.zoom);
 		}
 
 		this._viewReset();
@@ -4187,20 +3933,12 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 
 		map._fadeAnimated = false;
 
-		map.on('dragover', this._onDragOver, this);
-		map.on('drop', this._onDrop, this);
-
 		map.on('zoomstart', this._onZoomStart, this);
 		map.on('zoomend', this._onZoomEnd, this);
 		if (this._docType === 'spreadsheet') {
 			map.on('zoomend', this._onCellCursorShift, this);
 		}
 		map.on('error', this._mapOnError, this);
-		if (map.options.autoFitWidth !== false) {
-			// always true since autoFitWidth is never set
-			map.on('resize', this._fitWidthZoom, this);
-		}
-		this._map.on('resize', this._syncTileContainerSize, this);
 		// Retrieve the initial cell cursor position (as COKit only sends us an
 		// updated cell cursor when the selected cell is changed and not the initial
 		// cell).
@@ -4263,7 +4001,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 
 	getEvents: function () {
 		var events = {
-			viewreset: this._viewReset,
 			movestart: this._moveStart,
 			// update tiles on move, but not more often than once per given interval
 			move: app.util.throttle(this._move, this.options.updateInterval, this),
@@ -4272,71 +4009,6 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		};
 
 		return events;
-	},
-
-	// zoom is the new intermediate zoom level (log scale : 1 to 14)
-	zoomStep: function (zoom, newCenter) {
-		this._painter.zoomStep(zoom, newCenter);
-	},
-
-	zoomStepEnd: function (zoom, newCenter, mapUpdater, runAtFinish, noGap) {
-		this._painter.zoomStepEnd(zoom, newCenter, mapUpdater, runAtFinish, noGap);
-	},
-
-	preZoomAnimation: function (pinchStartCenter) {
-		this._pinchStartCenter = this._map.project(pinchStartCenter).multiplyBy(app.dpiScale); // in core pixels
-		this._painter._offset = new cool.Point(0, 0);
-		// Snapshot the starting scale. Each zoom frame drives app.twipsToPixels
-		// to base * _zoomFrameScale (see TilesSection.drawZoomFrame) so vector
-		// document sections scale in lockstep with the tiles.
-		this._painter._zoomBaseTwipsToPixels = app.twipsToPixels;
-
-		if (this._cursorMarker && app.file.textCursor.visible) {
-			this._cursorMarker.setOpacity(0);
-		}
-		if (this._map._textInput._cursorHandler)
-			this._map._textInput._cursorHandler.setOpacity(0);
-
-		TextSelections.hideHandles();
-
-		TextCursorSection.updateVisibilities();
-	},
-
-	postZoomAnimation: function () {
-		if (app.file.textCursor.visible) {
-			this._cursorMarker.setOpacity(1);
-		}
-
-		if (this._map._textInput._cursorHandler)
-			this._map._textInput._cursorHandler.setOpacity(1);
-
-		TextSelections.showHandles();
-
-		if (this._annotations) {
-			var annotations = this._annotations;
-			if (annotations.update)
-				setTimeout(function() {
-					annotations.update();
-				}, 250 /* ms */);
-		}
-	},
-
-	// Meant for desktop case, where the ending zoom and centers are all known in advance.
-	runZoomAnimation: function (zoomEnd, pinchCenter, mapUpdater, runAtFinish) {
-
-		if (this._map.getDocType() === 'spreadsheet')
-			OtherViewCellCursorSection.closePopups();
-
-		this.preZoomAnimation(pinchCenter);
-		this.zoomStep(this._map.getZoom(), pinchCenter);
-		var thisObj = this;
-		this.zoomStepEnd(zoomEnd, pinchCenter,
-			mapUpdater,
-			// runAtFinish
-			function () {
-				thisObj.postZoomAnimation();
-				runAtFinish();
-			});
 	},
 
 	_viewReset: function (e) {
@@ -4395,11 +4067,11 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 
 	_twipsToIntern: function (twips, zoom) {
 		var pixels = this._twipsToCssPixels(twips);
-		return this._map.unproject(pixels, zoom);
+		return app.activeDocument.unproject(pixels, zoom);
 	},
 
 	_internToTwips: function (intern, zoom) {
-		var pixels = this._map.project(intern, zoom);
+		var pixels = app.activeDocument.project(intern, zoom);
 		return this._cssPixelsToTwips(pixels);
 	},
 
@@ -4411,19 +4083,12 @@ window.L.CanvasTileLayer = window.L.Layer.extend({
 		return this._cssPixelsToTwips(pixels);
 	},
 
-	_updateMaxBounds: function (sizeChanged, allPages = true) {
+	_updateScrollLimits: function (allPages = true) {
 		if (app.activeDocument.fileSize.x === 0 || app.activeDocument.fileSize.y === 0) {
 			return;
 		}
 
 		var docPixelLimits = new cool.Point(app.activeDocument.fileSize.pX / app.dpiScale, app.activeDocument.fileSize.pY / app.dpiScale);
-		var scrollPixelLimits = new cool.Point(app.activeDocument.activeLayout.viewSize.pX / app.dpiScale, app.activeDocument.activeLayout.viewSize.pY / app.dpiScale);
-		var topLeft = this._map.unproject(new cool.Point(0, 0));
-
-		if (this._documentInfo === '' || sizeChanged) {
-			// we just got the first status so we need to center the document
-			this._map.setMaxBounds(InternBoundsUtil.flexConstruct(topLeft, this._map.unproject(scrollPixelLimits)));
-		}
 
 		this._docPixelSize = {x: docPixelLimits.x, y: docPixelLimits.y};
 		if (allPages) this._map.fire('scrolllimits', {});

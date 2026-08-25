@@ -12,7 +12,7 @@
  * Impress tile layer is used to display a presentation document
  */
 
-/* global app $ cool RenderManager ViewLayoutBase ViewLayoutFileBased */
+/* global app $ cool RenderManager ViewLayoutImpress ViewLayoutFileBased */
 
 // Single source of truth for Impress view modes. Keyed by the core
 // 'contextchange' context. 'mode' is the persisted string, 'uno' enters the
@@ -328,15 +328,15 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			this._partWidthTwips,
 			this._partHeightTwips,
 		);
-		app.activeDocument.swapLayout(new ViewLayoutBase());
+		app.activeDocument.swapLayout(new ViewLayoutImpress());
 		app.activeDocument.activeLayout.viewSize =
 			app.activeDocument.fileSize.clone();
-		this._updateMaxBounds(true, true);
+		this._updateScrollLimits(true);
 	},
 
 	// Total fileSize for filebased view: width = max width across parts (so
-	// landscape pages aren't clipped by Leaflet's maxBounds), height = sum of
-	// per-part heights plus _spaceBetweenParts between each pair.
+	// landscape pages aren't clipped), height = sum of per-part heights plus
+	// _spaceBetweenParts between each pair.
 	_computeFileBasedFileSize: function () {
 		// Prefer per-part dimensions when available. _partWidthTwips and
 		// _partHeightTwips reflect the current selected page (the caller in
@@ -370,9 +370,9 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 		app.activeDocument.fileSize = this._computeFileBasedFileSize();
 		app.activeDocument.swapLayout(new ViewLayoutFileBased());
 		// Flip the flag after swapLayout so paint code never sees the flag true
-		// while activeLayout still points at the previous ViewLayoutBase.
+		// while activeLayout still points at the previous ViewLayoutImpress.
 		app.file.fileBasedView = true;
-		this._updateMaxBounds(true, true);
+		this._updateScrollLimits(true);
 		RenderManager.updateFileBasedView();
 	},
 
@@ -522,7 +522,7 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			if (app.file.fileBasedView) {
 				// Rebuild the full filebased fileSize: max width across parts
 				// and the stacked total height. Both must be set before
-				// _updateMaxBounds below so Leaflet's max bounds cover the
+				// _updateScrollLimits below so the scroll limits cover the
 				// widest page.
 				app.activeDocument.fileSize = this._computeFileBasedFileSize();
 			}
@@ -539,7 +539,7 @@ window.L.ImpressTileLayer = window.L.CanvasTileLayer.extend({
 			}
 
 			let allPagesResized = !statusJSON.currentpageresized;
-			this._updateMaxBounds(true, allPagesResized);
+			this._updateScrollLimits(allPagesResized);
 
 			// statusupdate could be a broadcast from another view
 			if (isOwnStatus || statusJSON.viewid === this._viewId) {

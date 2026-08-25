@@ -227,9 +227,7 @@ export class CommentSection extends CanvasSectionObject {
 		offset: number;
 		width: number;
 		commentWidth: number;
-		collapsedMarginToTheEdge: number;
 		deflectionOfSelectedComment: number;
-		collapsedCommentWidth: number;
 		showSelectedBigger: boolean;
 		commentsAreListed: boolean;
 		show: boolean;
@@ -248,6 +246,7 @@ export class CommentSection extends CanvasSectionObject {
 	static commentWasAutoAdded: boolean = false;
 	static pendingImport: boolean = false;
 	static importingComments: boolean = false; // active during comments insertion, disable scroll
+	static showingEveryComment: boolean = false; // active while every comment is shown or hidden at once, disable scroll
 
 	// To associate comment id with its index in commentList array.
 	private idIndexMap: Map<any, number>;
@@ -297,8 +296,6 @@ export class CommentSection extends CanvasSectionObject {
 		this.sectionProperties.scrollAnnotation = null; // For impress, when 1 or more comments exist.
 		this.sectionProperties.commentWidth = CommentSection.getCommentWidth();
 		this.sectionProperties.commentWidthBigger =  588 * app.dpiScale;
-		this.sectionProperties.collapsedCommentWidth = 32 * 1.5 * app.dpiScale;
-		this.sectionProperties.collapsedMarginToTheEdge = 120; // CSS pixels.
 		this.sectionProperties.deflectionOfSelectedComment = 160; // CSS pixels.
 		this.sectionProperties.showSelectedBigger = false;
 		this.sectionProperties.calcCurrentComment = null; // We don't automatically show a Calc comment when cursor is on its cell. But we remember it to show if user presses Alt+C keys.
@@ -514,14 +511,18 @@ export class CommentSection extends CanvasSectionObject {
 	/// the document content instead of next to the page.
 	private static isMultiColumnLayout(): boolean {
 		const type = app.activeDocument.activeLayout.type;
-		return type === 'ViewLayoutMultiPage' || type === 'ViewLayoutCompareChanges';
+		return (
+			type === 'ViewLayoutMultiPage' ||
+			type === 'ViewLayoutCompareChanges' ||
+			type === 'ViewLayoutFileBased'
+		);
 	}
 
 	// Width of the empty space on one side of the document, in canvas pixels,
 	// the unit the comment column widths and the section coordinates use.
 	public calculateAvailableSpace() {
 		if (CommentSection.isMultiColumnLayout()) {
-			const layout = app.activeDocument.activeLayout as ViewLayoutMultiPage | ViewLayoutCompareChanges;
+			const layout = app.activeDocument.activeLayout as ViewLayoutMultiPage | ViewLayoutCompareChanges | ViewLayoutFileBased;
 			const availableSpace = layout.getTotalSideSpace();
 			return Math.round(availableSpace * 0.5);
 		}
@@ -544,8 +545,8 @@ export class CommentSection extends CanvasSectionObject {
 			the comments section doesn't end up in such layout normally,
 			either the user resized the window, or zoomed in. both of
 			those events are being listened to in ViewLayoutWriter and
-			when that happens, `ViewLayoutWriter` moves the document to
-			the left in function `adjustDocumentMarginsForComments`.
+			when that happens, `ViewLayoutWriter` shifts the document to
+			the left through its `getCenteringOffset` override.
 		*/
 		if (app.activeDocument.activeLayout.viewHasEnoughSpaceToShowFullWidthComments())
 			return false;
@@ -1380,7 +1381,8 @@ export class CommentSection extends CanvasSectionObject {
 	}
 
 	private scrollCommentIntoView (comment: Comment) {
-		if (CommentSection.importingComments || !comment)
+		if (CommentSection.importingComments || CommentSection.showingEveryComment
+			|| !comment)
 			return;
 
 		if (!comment.sectionProperties || !comment.sectionProperties.data) {
@@ -1403,35 +1405,48 @@ export class CommentSection extends CanvasSectionObject {
 
 		const anchorPos = rootComment.sectionProperties.data.anchorSPoint;
 		const isSpreadsheet = app.map._docLayer._docType === 'spreadsheet';
+		const cellRange = isSpreadsheet ? rootComment.sectionProperties.data.cellRange : null;
 
 		let leftTwips: number = anchorPos.toArray()[0];
 		let topTwips: number = anchorPos.toArray()[1];
-		if (isSpreadsheet && rootComment.sectionProperties.data.id !== 'new') {
-			// anchorPos is in display twips but
-			// app.isYVisibleInTheDisplayedArea() expects print-twips.
+		if (cellRange) {
+			// The sheet geometry gives the anchor cell in the same twips that the
+			// viewed rectangle and the split position are measured in, exact down
+			// to the grid line the cell starts on.
+			const cellRectangle = app.map._docLayer._cellRangeToTwipRect(cellRange).toRectangle();
+			leftTwips = cellRectangle[0];
+			topTwips = cellRectangle[1];
+		}
+		else if (isSpreadsheet && rootComment.sectionProperties.data.id !== 'new') {
+			// anchorPos is in display twips but the checks below expect print-twips.
 			const anchorPrintTwips = (app.map._docLayer.sheetGeometry as cool.SheetGeometry)
 				.getPrintTwipsPointFromTile(new cool.Point(leftTwips, topTwips));
 			leftTwips = anchorPrintTwips.x;
 			topTwips = anchorPrintTwips.y;
 		}
-		const topVisible = app.isYVisibleInTheDisplayedArea(topTwips);
-		const commentHeight = this.cssToCorePixels(rootComment.getCommentHeight());
-		const bottomVisible = app.isYVisibleInTheDisplayedArea(
-			topTwips + Math.round(commentHeight * app.pixelsToTwips)
-		);
 
 		const layout = app.activeDocument.activeLayout;
+		const view = layout.viewedRectangle;
 		// Frozen rows and columns hold the top and the left of the view, so the pane
-		// that actually scrolls starts this far into it.
-		const knowsSplit = isSpreadsheet && !!app.calc.splitCoordinate;
-		const splitXPixels = knowsSplit ? app.calc.splitCoordinate.pX : 0;
-		const splitYPixels = knowsSplit ? app.calc.splitCoordinate.pY : 0;
-		let scrollX: number = layout.viewedRectangle.pX1;
-		let scrollY: number = layout.viewedRectangle.pY1;
+		// that actually scrolls starts this far into it. The split line itself is
+		// the first grid line of that pane.
+		const split = isSpreadsheet && app.calc.splitCoordinate
+			? app.calc.splitCoordinate : new cool.SimplePoint(0, 0);
+		const splitXPixels = split.pX;
+		const splitYPixels = split.pY;
 
-		// An anchor in the frozen rows keeps its place on screen, so the vertical
-		// position stays as it is.
-		const pinnedByFrozenRows = this.isTopInFrozenPane(topTwips);
+		const commentHeight = this.cssToCorePixels(rootComment.getCommentHeight());
+		const commentBottomTwips = topTwips + Math.round(commentHeight * app.pixelsToTwips);
+		const topVisible = CommentSection.isInScrollingPane(topTwips, split.y, view.y1, view.y2);
+		const bottomVisible = CommentSection.isInScrollingPane(
+			commentBottomTwips, split.y, view.y1, view.y2);
+
+		let scrollX: number = view.pX1;
+		let scrollY: number = view.pY1;
+
+		// An anchor inside the frozen rows keeps its place on screen, so the
+		// vertical position stays as it is.
+		const pinnedByFrozenRows = topTwips < split.y;
 
 		if (!pinnedByFrozenRows && (!topVisible || !bottomVisible)) {
 			const topPixels = topTwips * app.twipsToPixels;
@@ -1458,14 +1473,17 @@ export class CommentSection extends CanvasSectionObject {
 		// is measured from where the scrolling pane starts, and it puts the anchor
 		// near the left edge of that pane with the same 5% margin. Sheets that run
 		// right to left keep the horizontal position they have.
+		const pinnedByFrozenColumns = leftTwips < split.x;
+		const leftVisible = CommentSection.isInScrollingPane(leftTwips, split.x, view.x1, view.x2);
+
 		if (isSpreadsheet && !app.map._docLayer.isCalcRTL()
-			&& !app.isXVisibleInTheDisplayedArea(leftTwips)) {
-			const paneWidth = layout.viewedRectangle.pWidth - splitXPixels;
+			&& !pinnedByFrozenColumns && !leftVisible) {
+			const paneWidth = view.pWidth - splitXPixels;
 			scrollX = Math.round(
 				leftTwips * app.twipsToPixels - splitXPixels - paneWidth * 0.05);
 		}
 
-		if (scrollX !== layout.viewedRectangle.pX1 || scrollY !== layout.viewedRectangle.pY1) {
+		if (scrollX !== view.pX1 || scrollY !== view.pY1) {
 			layout.scrollTo(scrollX, scrollY);
 
 			if (isSpreadsheet) {
@@ -1475,23 +1493,12 @@ export class CommentSection extends CanvasSectionObject {
 		}
 	}
 
-	// A frozen-row pane sits at the top of the view (its rectangle has pY1 === 0).
-	private isTopInFrozenPane (topTwips: number): boolean {
-		const splitPanesContext = app.map._docLayer._splitPanesContext;
-		if (!splitPanesContext)
-			return false;
-
-		// Without frozen rows the whole view is a single pane, and its rectangle
-		// starts at 0 as well whenever the sheet is scrolled to the very top.
-		if (!app.calc.splitCoordinate || app.calc.splitCoordinate.pY <= 0)
-			return false;
-
-		const rectangles = splitPanesContext.getViewRectangles();
-		for (let i = 0; i < rectangles.length; i++) {
-			if (rectangles[i].pY1 === 0 && rectangles[i].containsY(topTwips))
-				return true;
-		}
-		return false;
+	// Where a document position on one axis sits: the pane that scrolls runs from
+	// the split line, where the frozen rows or columns end, to the far edge of the
+	// view. Positions are in twips.
+	private static isInScrollingPane (position: number, split: number,
+		viewStart: number, viewEnd: number): boolean {
+		return position >= viewStart + split && position <= viewEnd;
 	}
 
 	/// returns canvas top and bottom position in core pixels
@@ -1825,8 +1832,7 @@ export class CommentSection extends CanvasSectionObject {
 	public showHideComment (annotation: Comment): void {
 		// This manually shows/hides comments
 		if (!this.sectionProperties.showResolved && app.map._docLayer._docType === 'text') {
-			let hide = annotation.isContainerVisible() && annotation.sectionProperties.data.resolved === 'true';
-			hide = hide || (CommentSection.isMultiColumnLayout() && this.calculateAvailableSpace() < this.sectionProperties.collapsedCommentWidth);
+			const hide = annotation.isContainerVisible() && annotation.sectionProperties.data.resolved === 'true';
 
 			if (hide && annotation.isContainerVisible()) {
 				if (this.sectionProperties.selectedComment == annotation) {
@@ -1840,18 +1846,6 @@ export class CommentSection extends CanvasSectionObject {
 				annotation.update();
 			}
 			this.update();
-		}
-		else if (CommentSection.isMultiColumnLayout()) {
-			const hide = this.calculateAvailableSpace() < this.sectionProperties.collapsedCommentWidth;
-
-			if (hide && annotation.isContainerVisible()) {
-				annotation.show();
-				annotation.update();
-			}
-			else if (!hide && !annotation.isContainerVisible()) {
-				annotation.show();
-				annotation.update();
-			}
 		}
 		else if (app.map._docLayer._docType === 'presentation' || app.map._docLayer._docType === 'drawing') {
 			if (annotation.sectionProperties.partIndex === app.map._docLayer._selectedPart || app.file.fileBasedView) {
@@ -2646,6 +2640,33 @@ export class CommentSection extends CanvasSectionObject {
 		}
 	}
 
+	// The absolute VIEW-space Y (twips) the lowest comment reaches, used to grow
+	// viewSize.y. `lastY` is the on-screen (scroll-relative) bottom of the comment
+	// stack; converting it to view space needs the on-screen->view offset, which
+	// is exactly what documentToViewY adds on top of a point's view-space Y:
+	//   - Single-window layouts fold the scroll (and centering) into the viewed
+	//     rectangle, and view space == document space, so viewedRectangle.pY1 is
+	//     that offset.
+	//   - The multi-column layouts (MultiPage/Compare/FileBased) keep the scroll in
+	//     scrollProperties.viewY and the canvas anchor in the documentToViewY
+	//     mapping (vY = viewY_of_point - scrollProperties.viewY + anchorThickness),
+	//     so the offset is scrollProperties.viewY minus the anchor thickness.
+	// Either way lastY already carries -offset (through the anchor vY used while the
+	// stack was laid out this same frame), so the offset cancels and the result is
+	// scroll-invariant - it does not run away as viewSize.y grows.
+	private commentStackBottomViewTwips(lastY: number): number {
+		const layout = app.activeDocument.activeLayout;
+
+		if (!CommentSection.isMultiColumnLayout())
+			return (lastY + layout.viewedRectangle.pY1) * app.pixelsToTwips;
+
+		const anchorThickness = app.sectionContainer.getDocumentAnchor()[1];
+		return (
+			(lastY + layout.scrollProperties.viewY - anchorThickness) *
+			app.pixelsToTwips
+		);
+	}
+
 	private layout (relayout: boolean = true): void {
 		if ((<any>window).mode.isSmallScreenDevice() || app.map._docLayer._docType === 'spreadsheet') {
 			if (this.sectionProperties.commentList.length > 0)
@@ -2669,7 +2690,13 @@ export class CommentSection extends CanvasSectionObject {
 			var x = isRTL ? 0 : topRight[0];
 
 			if (CommentSection.isMultiColumnLayout()) {
-				x = topRight[0] - availableSpace;
+				// Follow horizontal scroll like the pages do (documentToViewX also
+				// subtracts viewX), so scrolling right brings the comment column into
+				// view instead of leaving it pinned off-screen.
+				x =
+					topRight[0] -
+					availableSpace -
+					app.activeDocument.activeLayout.scrollProperties.viewX;
 			}
 			else if (isRTL)
 				x = availableSpace - this.sectionProperties.commentWidth;
@@ -2734,18 +2761,29 @@ export class CommentSection extends CanvasSectionObject {
 			}
 		}
 
-		let horizontalScroll = app.activeDocument.fileSize.x;
-		if (availableSpace < this.sectionProperties.commentWidth && !this.isCollapsed)
-			horizontalScroll += this.sectionProperties.commentWidth * app.pixelsToTwips;
+		// Grow the scrollable area to cover the comments. The layout owns viewSize
+		// (ensureViewSizeCoversComments): extra column width (twips) when a comment
+		// does not fit in the margin, and the absolute VIEW-space Y (twips) the
+		// lowest comment reaches (commentStackBottomViewTwips). Assigning viewSize
+		// directly here used to feed back into calculateAvailableSpace / page
+		// positioning and drift the layout. lastY is only computed when comments are
+		// laid out (the block above), so skip the growth otherwise - an undefined
+		// lastY would poison viewSize with NaN and blank the tiles.
+		const noComments = this.commentsHiddenOrNotPresent();
+		const extraWidth =
+			!noComments &&
+			availableSpace < this.sectionProperties.commentWidth &&
+			!this.isCollapsed
+				? this.sectionProperties.commentWidth * app.pixelsToTwips
+				: 0;
+		const commentBottomY = noComments
+			? 0
+			: this.commentStackBottomViewTwips(lastY);
 
-		const checkY = lastY + app.activeDocument.activeLayout.viewedRectangle.pY1;
-
-		if (checkY > app.activeDocument.fileSize.pY) {
-			app.activeDocument.activeLayout.viewSize = new cool.SimplePoint(horizontalScroll, checkY * app.pixelsToTwips);
-			this.containerObject.requestReDraw();
-		}
-		else
-			app.activeDocument.activeLayout.viewSize = new cool.SimplePoint(horizontalScroll, app.activeDocument.fileSize.y);
+		app.activeDocument.activeLayout.ensureViewSizeCoversComments(
+			extraWidth,
+			commentBottomY,
+		);
 
 		this.disableLayoutAnimation = false;
 	}
@@ -2823,9 +2861,12 @@ export class CommentSection extends CanvasSectionObject {
 	public setViewResolved (state: boolean): void {
 		this.sectionProperties.showResolved = state;
 
+		// A resolved comment is shown only while comments as a whole are shown.
+		const showResolvedComments = state && this.sectionProperties.show !== false;
+
 		for (var idx = 0; idx < this.sectionProperties.commentList.length;idx++) {
 			if (this.sectionProperties.commentList[idx].sectionProperties.data.resolved === 'true') {
-				if (state==false) {
+				if (!showResolvedComments) {
 					if (this.sectionProperties.selectedComment == this.sectionProperties.commentList[idx]) {
 						this.unselect();
 					}
@@ -2848,6 +2889,12 @@ export class CommentSection extends CanvasSectionObject {
 		this.sectionProperties.show = state;
 		const commentShouldCollapse = this.shouldCollapse();
 
+		// Showing or hiding the whole list changes what is on screen, not where the
+		// view is, so the view stays where the reader left it. In Calc each comment
+		// shown here becomes the selected one in turn, and selecting a comment is
+		// what moves the view to it.
+		CommentSection.showingEveryComment = true;
+
 		for (var idx = 0; idx < this.sectionProperties.commentList.length; idx++) {
 			if (state == false) {
 				this.sectionProperties.commentList[idx].hide();
@@ -2858,6 +2905,8 @@ export class CommentSection extends CanvasSectionObject {
 				}
 			}
 		}
+
+		CommentSection.showingEveryComment = false;
 		this.update();
 	}
 
