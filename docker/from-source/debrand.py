@@ -18,6 +18,14 @@ from pathlib import Path
 PRODUCT_NAME = "Online Office"
 FORBIDDEN_MARK = re.compile(r"\bcollabora(?:[_ -]?(?:office|online))?\b", re.IGNORECASE)
 URL_WITH_MARK = re.compile(r"https?://[^\s\"'<>]*collabora[^\s\"'<>]*", re.IGNORECASE)
+BRANDED_HOST_FRAGMENT = re.compile(
+    r"(?:[A-Za-z0-9-]+\.)*collabora(?:online|office)?\.[A-Za-z]{2,}",
+    re.IGNORECASE,
+)
+BRANDED_HOST_PREFIX = re.compile(
+    r"(?:[A-Za-z0-9-]+\.)*collabora(?:online|office)?\.(?![A-Za-z]{2,})",
+    re.IGNORECASE,
+)
 EMAIL_WITH_MARK = re.compile(
     r"[\w.+-]+@(?:[\w-]+\.)*collabora(?:office)?\.[A-Za-z]{2,}", re.IGNORECASE
 )
@@ -148,6 +156,10 @@ def replace_marks(text: str) -> str:
     text = COMPATIBILITY.sub(protect, text)
     text = EMAIL_WITH_MARK.sub("support@example.invalid", text)
     text = URL_WITH_MARK.sub("about:blank", text)
+    # Gettext wraps long URLs across quoted lines, which can leave a marked
+    # hostname on a line without its scheme. Neutralise that fragment too.
+    text = BRANDED_HOST_FRAGMENT.sub("example.invalid", text)
+    text = BRANDED_HOST_PREFIX.sub("example.invalid.", text)
     replacements = (
         (
             re.compile(
@@ -645,6 +657,18 @@ def self_test() -> None:
     assert "about:blank" in rewritten
     assert "Online_Office" in rewritten
 
+    wrapped_catalogue_url = (
+        '"For help see https://"\n'
+        '"sdk.collaboraonline.com/docs/installation/Proxy_settings.html"\n'
+        '"More details at https://www."\n'
+        '"collaboraonline.org/post/build-code/"\n'
+        '"A malformed translation has https ://collaboraonline."\n'
+        '"org/post/translate/"\n'
+    )
+    rewritten_catalogue_url = rewrite_text(wrapped_catalogue_url)
+    assert "collabora" not in rewritten_catalogue_url.lower()
+    assert rewritten_catalogue_url.count("example.invalid") == 3
+
     embedded = "prefixCollaboraOfficeSuffix PRODUCTNAME.collaboraoffice CollaboraOffice"
     assert rewrite_text(embedded) == (
         "prefixOnlineOfficeSuffix PRODUCTNAME.OnlineOffice OnlineOffice"
@@ -698,6 +722,15 @@ def self_test() -> None:
         (source_root / "engine/static/emscripten").mkdir(parents=True)
         (source_root / "browser/html/cool.html").write_text(
             "<title>Collabora Online</title>\n", encoding="utf-8"
+        )
+        (source_root / "browser/po/templates").mkdir(parents=True)
+        (source_root / "browser/po/templates/cool-ui.pot").write_text(
+            wrapped_catalogue_url,
+            encoding="utf-8",
+        )
+        (source_root / "browser/po/ui-en_GB.po").write_text(
+            wrapped_catalogue_url,
+            encoding="utf-8",
         )
         (demo / "manifest.json").write_text(
             '{"name": "Collabora Office demo"}\n', encoding="utf-8"
