@@ -49,6 +49,11 @@ do
   fi
 done
 
+if ! docker buildx version >/dev/null 2>&1; then
+  echo "Missing required Docker Buildx plugin: docker buildx" >&2
+  missing=1
+fi
+
 check_header() {
   header="$1"
   if ! printf '#include <%s>\nint main(void) { return 0; }\n' "$header" | \

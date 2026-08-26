@@ -21,6 +21,7 @@ RUN apt-get update && \
         cmake \
         curl \
         default-jdk \
+        docker-buildx \
         docker-cli \
         doxygen \
         flex \
