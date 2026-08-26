@@ -602,6 +602,36 @@ def assert_distroless_runtime(rootfs: Path) -> None:
             raise RuntimeError(f"external system font leaked into runtime: {font_root}")
 
 
+def extract_container_rootfs(container: str, destination: Path) -> None:
+    """Stream a container rootfs into a scanner-owned directory."""
+    with subprocess.Popen(
+        ["docker", "cp", f"{container}:/.", "-"],
+        stdout=subprocess.PIPE,
+    ) as docker_cp:
+        if docker_cp.stdout is None:
+            raise RuntimeError("Docker rootfs archive stream is unavailable")
+        try:
+            extraction = subprocess.run(
+                [
+                    "tar",
+                    "--extract",
+                    "--directory",
+                    str(destination),
+                    "--no-same-owner",
+                    "--no-same-permissions",
+                ],
+                stdin=docker_cp.stdout,
+                check=False,
+            )
+        finally:
+            docker_cp.stdout.close()
+        docker_cp_returncode = docker_cp.wait()
+
+    if docker_cp_returncode:
+        raise subprocess.CalledProcessError(docker_cp_returncode, docker_cp.args)
+    extraction.check_returncode()
+
+
 def scan_image(
     image: str,
     neutral_favicon: Path,
@@ -680,10 +710,13 @@ def scan_image(
         with tempfile.TemporaryDirectory() as directory:
             rootfs = Path(directory) / "rootfs"
             rootfs.mkdir()
-            subprocess.run(
-                ["docker", "cp", f"{container}:/.", str(rootfs)],
-                check=True,
-            )
+            if distroless:
+                extract_container_rootfs(container, rootfs)
+            else:
+                subprocess.run(
+                    ["docker", "cp", f"{container}:/.", str(rootfs)],
+                    check=True,
+                )
             scan_rootfs(rootfs, neutral_favicon.resolve())
             if distroless:
                 assert_distroless_runtime(rootfs)
