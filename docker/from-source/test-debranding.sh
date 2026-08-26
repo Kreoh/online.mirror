@@ -16,8 +16,11 @@ grep -Fq 'ARG ONLINE_OFFICE_SOURCE_REVISION' "$repo_root/docker/from-source/Dist
 
 po_validation_line="$(grep -nF 'debrand.py" validate-po' \
   "$repo_root/docker/from-source/build.sh" | cut -d: -f1)"
+source_scan_line="$(grep -nF 'debrand.py" scan-source' \
+  "$repo_root/docker/from-source/build.sh" | cut -d: -f1)"
 engine_autogen_line="$(grep -nF 'cd online/engine && ./autogen.sh' \
   "$repo_root/docker/from-source/build.sh" | cut -d: -f1)"
+test "$source_scan_line" -lt "$engine_autogen_line"
 test "$po_validation_line" -lt "$engine_autogen_line"
 
 echo "Online Office pipeline debranding checks passed."

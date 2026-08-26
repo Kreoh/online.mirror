@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import io
 import json
@@ -43,9 +44,7 @@ LEGAL_OR_PROVENANCE = re.compile(
 
 COMPATIBILITY = re.compile(
     r"COM\.COLLABORAOFFICE\.MSVD|"
-    r"CollaboraOffice:ThreadedCommentPerson:|"
-    r"urn:com:collaboraoffice|xmlns:coext|\bcoext:|"
-    r"startsWithIgnoreAsciiCase\(\"Collabora\"\)",
+    r"urn:com:collaboraoffice|xmlns:coext|\bcoext:",
     re.IGNORECASE,
 )
 
@@ -759,14 +758,22 @@ def self_test() -> None:
     legal = "Copyright the Collabora Online contributors."
     assert rewrite_text(legal) == legal
     compatibility = (
-        "COM.COLLABORAOFFICE.MSVD CollaboraOffice:ThreadedCommentPerson: "
+        "COM.COLLABORAOFFICE.MSVD "
         'xmlns:coext="urn:com:collaboraoffice:names:experimental" coext:value'
     )
     assert rewrite_text(compatibility) == compatibility
     assert not mark_violations(Path("compatibility.xml"), compatibility)
-    detection_code = 'aGenerator.startsWithIgnoreAsciiCase("Collabora")'
-    assert rewrite_text(detection_code) == detection_code
-    assert not mark_violations(Path("detection.cxx"), detection_code)
+
+    threaded_comment_namespace = '"CollaboraOffice:ThreadedCommentPerson:"'
+    assert rewrite_text(threaded_comment_namespace) == (
+        '"OnlineOffice:ThreadedCommentPerson:"'
+    )
+    generator_detection = 'aGenerator.startsWithIgnoreAsciiCase("Collabora")'
+    assert rewrite_text(generator_detection) == (
+        'aGenerator.startsWithIgnoreAsciiCase("Online Office")'
+    )
+    assert mark_violations(Path("threaded-comment.cxx"), threaded_comment_namespace)
+    assert mark_violations(Path("generator-detection.cxx"), generator_detection)
 
     mixed_compatibility = compatibility + " CollaboraOffice"
     mixed_rewritten = rewrite_text(mixed_compatibility)
@@ -818,6 +825,23 @@ def self_test() -> None:
             autoconf_declaration,
             encoding="utf-8",
         )
+        threaded_comment_source = (
+            source_root
+            / "engine/sc/source/ui/operation/InsertThreadedCommentOperation.cxx"
+        )
+        threaded_comment_source.parent.mkdir(parents=True)
+        threaded_comment_source.write_text(
+            'OString aInput = "CollaboraOffice:ThreadedCommentPerson:";\n',
+            encoding="utf-8",
+        )
+        generator_source = (
+            source_root / "engine/sc/source/filter/oox/workbookhelper.cxx"
+        )
+        generator_source.parent.mkdir(parents=True)
+        generator_source.write_text(
+            'aGenerator.startsWithIgnoreAsciiCase("Collabora");\n',
+            encoding="utf-8",
+        )
         (demo / "manifest.json").write_text(
             '{"name": "Collabora Office demo"}\n', encoding="utf-8"
         )
@@ -835,6 +859,32 @@ def self_test() -> None:
         scan_source(source_root)
         assert not demo.exists()
         assert (source_root / "favicon.ico").read_bytes() == neutral_icon
+        assert "OnlineOffice:ThreadedCommentPerson:" in (
+            threaded_comment_source.read_text(encoding="utf-8")
+        )
+        assert 'startsWithIgnoreAsciiCase("Online Office")' in (
+            generator_source.read_text(encoding="utf-8")
+        )
+
+        threaded_comment_source.write_text(
+            'OString aInput = "CollaboraOffice:ThreadedCommentPerson:";\n',
+            encoding="utf-8",
+        )
+        generator_source.write_text(
+            'aGenerator.startsWithIgnoreAsciiCase("Collabora");\n',
+            encoding="utf-8",
+        )
+        scan_errors = io.StringIO()
+        with contextlib.redirect_stderr(scan_errors):
+            try:
+                scan_source(source_root)
+            except SystemExit as error:
+                assert error.code == 1
+            else:
+                raise AssertionError("pre-build scan accepted compiled product marks")
+        scan_output = scan_errors.getvalue()
+        assert "CollaboraOffice:ThreadedCommentPerson:" in scan_output
+        assert 'startsWithIgnoreAsciiCase("Collabora")' in scan_output
 
     with tempfile.TemporaryDirectory() as directory:
         rootfs = Path(directory)
