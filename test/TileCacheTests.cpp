@@ -36,8 +36,9 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 
-#include <sstream>
+#include <climits>
 #include <random>
+#include <sstream>
 
 using namespace std::literals;
 using namespace helpers;
@@ -70,6 +71,7 @@ class TileCacheTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST_SUITE(TileCacheTests);
 
     CPPUNIT_TEST(testDesc);
+    CPPUNIT_TEST(testInvalidateMessageParsing);
     CPPUNIT_TEST(testSimple);
     CPPUNIT_TEST(testSimpleCombine);
     CPPUNIT_TEST(testTileSubscription);
@@ -108,6 +110,7 @@ class TileCacheTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST_SUITE_END();
 
     void testDesc();
+    void testInvalidateMessageParsing();
     void testSimple();
     void testSimpleCombine();
     void testTileSubscription();
@@ -214,6 +217,77 @@ void TileCacheTests::testDesc()
     TileDescCacheCompareEq pred;
     LOK_ASSERT_MESSAGE("TileDesc versions do match", descA.getVersion() != descB.getVersion());
     LOK_ASSERT_MESSAGE("TileDesc should match, ignoring unimportant fields", pred(descA, descB));
+}
+
+void TileCacheTests::testInvalidateMessageParsing()
+{
+    struct Expected
+    {
+        std::string message;
+        int part;
+        int mode;
+        TileWireId wireId;
+        Util::Rectangle rectangle;
+    };
+
+    const std::vector<Expected> legacyCases = {
+        { "invalidatetiles: EMPTY", -1, 0, 0, Util::Rectangle(0, 0, INT_MAX, INT_MAX) },
+        { "invalidatetiles: EMPTY, wid=123", -1, 0, 123, Util::Rectangle(0, 0, INT_MAX, INT_MAX) },
+        { "invalidatetiles: EMPTY, 4 wid=123", 4, 0, 123, Util::Rectangle(0, 0, INT_MAX, INT_MAX) },
+        { "invalidatetiles: EMPTY, 4 5 wid=123", 4, 5, 123,
+          Util::Rectangle(0, 0, INT_MAX, INT_MAX) },
+        { "invalidatetiles: part=4 x=1 y=2 width=3 height=4 wid=123", 4, 0, 123,
+          Util::Rectangle(1, 2, 3, 4) },
+        { "invalidatetiles: part=4 mode=5 x=1 y=2 width=3 height=4 wid=123", 4, 5, 123,
+          Util::Rectangle(1, 2, 3, 4) },
+    };
+
+    const auto checkValid = [](const Expected& expected, const std::string& attribution)
+    {
+        int part = 0;
+        int mode = 0;
+        TileWireId wireId = 0;
+        const Util::Rectangle rectangle =
+            TileCache::parseInvalidateMsg(expected.message + attribution, part, mode, wireId);
+        CPPUNIT_ASSERT_EQUAL(expected.part, part);
+        CPPUNIT_ASSERT_EQUAL(expected.mode, mode);
+        CPPUNIT_ASSERT_EQUAL(expected.wireId, wireId);
+        CPPUNIT_ASSERT_EQUAL(expected.rectangle.getLeft(), rectangle.getLeft());
+        CPPUNIT_ASSERT_EQUAL(expected.rectangle.getTop(), rectangle.getTop());
+        CPPUNIT_ASSERT_EQUAL(expected.rectangle.getWidth(), rectangle.getWidth());
+        CPPUNIT_ASSERT_EQUAL(expected.rectangle.getHeight(), rectangle.getHeight());
+    };
+
+    for (const Expected& expected : legacyCases)
+    {
+        checkValid(expected, "");
+        checkValid(expected, " sourceviewid=-17");
+    }
+
+    checkValid(legacyCases[4], " sourceviewid=" + std::to_string(INT_MAX));
+    checkValid(legacyCases[5], " sourceviewid=" + std::to_string(INT_MIN));
+    checkValid(legacyCases[4], " sourceviewid=+17");
+
+    const auto checkInvalid = [](const std::string& suffix)
+    {
+        int part = 0;
+        int mode = 0;
+        TileWireId wireId = 0;
+        const Util::Rectangle rectangle = TileCache::parseInvalidateMsg(
+            "invalidatetiles: part=4 x=1 y=2 width=3 height=4 wid=123 " + suffix, part, mode,
+            wireId);
+        CPPUNIT_ASSERT_EQUAL(-1, part);
+        CPPUNIT_ASSERT_EQUAL(0, rectangle.getLeft());
+        CPPUNIT_ASSERT_EQUAL(0, rectangle.getTop());
+        CPPUNIT_ASSERT_EQUAL(0, rectangle.getWidth());
+        CPPUNIT_ASSERT_EQUAL(0, rectangle.getHeight());
+    };
+
+    checkInvalid("sourceviewid=12junk");
+    checkInvalid("sourceviewid=" + std::to_string(static_cast<long long>(INT_MAX) + 1));
+    checkInvalid("sourceviewid=" + std::to_string(static_cast<long long>(INT_MIN) - 1));
+    checkInvalid("extra=12");
+    checkInvalid("sourceviewid=12 sourceviewid=13");
 }
 
 void TileCacheTests::testSimple()

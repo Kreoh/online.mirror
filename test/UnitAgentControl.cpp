@@ -45,14 +45,6 @@ class UnitAgentControl final : public WopiTestServer
     std::shared_ptr<http::WebSocketSession> _urpSocket;
     std::size_t _invalidViewIdIndex = 0;
 
-    std::vector<char> tilePayload(const std::vector<char>& tile)
-    {
-        const std::string firstLine = COOLProtocol::getFirstLine(tile);
-        LOK_ASSERT_MESSAGE("The tile response must contain an image payload",
-                           tile.size() > firstLine.size() + 1);
-        return { tile.begin() + firstLine.size() + 1, tile.end() };
-    }
-
     void verifyBrowserRepaint()
     {
         const auto browser = _browser.lock();
@@ -63,12 +55,20 @@ class UnitAgentControl final : public WopiTestServer
         LOK_ASSERT(_renderSocket);
 
         while (!helpers::getResponseString(_renderSocket, "lastmodtime:", getTestname(),
-                                            std::chrono::milliseconds(1))
+                                           std::chrono::milliseconds(1))
                     .empty())
         {
         }
 
         helpers::sendTextFrame(_browserSocket, "useractive", getTestname());
+        helpers::sendTextFrame(
+            _browserSocket,
+            "clientzoom tilepixelwidth=256 tilepixelheight=256 tiletwipwidth=3840 "
+            "tiletwipheight=3840 dpiscale=1 zoom=10",
+            getTestname());
+        helpers::sendTextFrame(_browserSocket,
+                               "clientvisiblearea x=0 y=0 width=3840 height=3840 splitx=0 splity=0",
+                               getTestname());
         const std::string tileRequest =
             "tilecombine nviewid=" + std::to_string(browser->getKitViewId()) +
             " part=0 width=256 height=256 tileposx=0 tileposy=0 oldwid=0 "
@@ -84,18 +84,18 @@ class UnitAgentControl final : public WopiTestServer
             helpers::getResponseString(_browserSocket, "invalidatetiles:", getTestname());
         LOK_ASSERT_MESSAGE("The collaborator mutation must invalidate the browser view",
                            !invalidation.empty());
-        LOK_ASSERT_MESSAGE("The browser invalidation must identify the mutating agent view",
-                           invalidation.find("sourceviewid=" +
-                                             std::to_string(renderView->getKitViewId())) != std::string::npos);
+        LOK_ASSERT_MESSAGE(
+            "The browser invalidation must identify the mutating agent view",
+            invalidation.find("sourceviewid=" + std::to_string(renderView->getKitViewId())) !=
+                std::string::npos);
 
-        helpers::sendTextFrame(_browserSocket, tileRequest, getTestname());
-        const auto after = helpers::getResponseMessage(_browserSocket, "tile:", getTestname());
-        LOK_ASSERT_MESSAGE("The browser must receive its repainted tile", !after.empty());
-        LOK_ASSERT_MESSAGE("The repainted browser tile must differ after the mutation",
-                           tilePayload(before) != tilePayload(after));
+        const auto replacement = _browserSocket->waitForMessageAny(
+            { "tile:", "delta:" }, std::chrono::seconds(10), getTestname());
+        LOK_ASSERT_MESSAGE("The invalidation must automatically repaint the browser tile",
+                           !replacement.empty());
 
-        helpers::sendTextFrame(
-            _renderSocket, "save dontTerminateEdit=1 dontSaveIfUnmodified=0", getTestname());
+        helpers::sendTextFrame(_renderSocket, "save dontTerminateEdit=1 dontSaveIfUnmodified=0",
+                               getTestname());
         const auto saveResult =
             helpers::getResponseString(_renderSocket, "unocommandresult:", getTestname());
         LOK_ASSERT_MESSAGE("The collaborator mutation must save before test teardown",

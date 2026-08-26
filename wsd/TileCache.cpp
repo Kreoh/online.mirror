@@ -20,6 +20,7 @@
 
 #include <common/Common.hpp>
 #include <common/FileUtil.hpp>
+#include <common/NumUtil.hpp>
 #include <common/Protocol.hpp>
 #include <common/StringVector.hpp>
 #include <common/Unit.hpp>
@@ -468,22 +469,39 @@ Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, int &par
 
     assert(!tokens.empty() && tokens.equals(0, "invalidatetiles:"));
 
+    // Validate optional attribution separately; it does not affect invalidation geometry.
+    std::size_t tokenCount = tokens.size();
+    constexpr std::string_view sourceViewIdPrefix = "sourceviewid=";
+    if (tokenCount > 1)
+    {
+        const std::string trailingToken = tokens[tokenCount - 1];
+        if (trailingToken.starts_with(sourceViewIdPrefix))
+        {
+            const std::string_view value =
+                std::string_view(trailingToken).substr(sourceViewIdPrefix.size());
+            std::size_t offset = 0;
+            const auto result = NumUtil::parseStrTo<int>(value, offset);
+            if (result.second == NumUtil::StrToState::Complete)
+                --tokenCount;
+        }
+    }
+
     mode = 0;
     part = 0;
     wireId = 0;
-    if (tokens.size() == 2 && tokens.equals(1, "EMPTY"))
+    if (tokenCount == 2 && tokens.equals(1, "EMPTY"))
     {
         part = -1;
         return Util::Rectangle(0, 0, INT_MAX, INT_MAX);
     }
-    else if (tokens.size() == 3 && tokens.equals(1, "EMPTY,"))
+    else if (tokenCount == 3 && tokens.equals(1, "EMPTY,"))
     {
         part = -1;
         if (!tokens.getUInt32(2, "wid", wireId))
             assert(false && "missing wid");
         return Util::Rectangle(0, 0, INT_MAX, INT_MAX);
     }
-    else if (tokens.size() == 4 && tokens.equals(1, "EMPTY,"))
+    else if (tokenCount == 4 && tokens.equals(1, "EMPTY,"))
     {
         if (stringToInteger(tokens[2], part))
         {
@@ -492,7 +510,7 @@ Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, int &par
             return Util::Rectangle(0, 0, INT_MAX, INT_MAX);
         }
     }
-    else if (tokens.size() == 5 && tokens.equals(1, "EMPTY,"))
+    else if (tokenCount == 5 && tokens.equals(1, "EMPTY,"))
     {
         if (stringToInteger(tokens[2], part))
         {
@@ -510,7 +528,7 @@ Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, int &par
         int y = 0;
         int width = 0;
         int height = 0;
-        if (tokens.size() == 7 &&
+        if (tokenCount == 7 &&
             getTokenInteger(tokens[1], "part", part) &&
             getNonNegTokenInteger(tokens[2], "x", x) &&
             getNonNegTokenInteger(tokens[3], "y", y) &&
@@ -520,7 +538,7 @@ Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, int &par
         {
             return Util::Rectangle(x, y, width, height);
         }
-        else if (tokens.size() == 8 &&
+        else if (tokenCount == 8 &&
             getTokenInteger(tokens[1], "part", part) &&
             getTokenInteger(tokens[2], "mode", mode) &&
             getNonNegTokenInteger(tokens[3], "x", x) &&
@@ -534,7 +552,6 @@ Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, int &par
     }
 
     LOG_ERR("Unexpected invalidatetiles request [" << tiles << "].");
-    assert(false && "Unexpected invalidatetiles request");
     part = -1;
     return Util::Rectangle(0, 0, 0, 0);
 }
