@@ -18,8 +18,8 @@ from pathlib import Path
 PRODUCT_NAME = "Online Office"
 FORBIDDEN_MARK = re.compile(r"\bcollabora(?:[_ -]?(?:office|online))?\b", re.IGNORECASE)
 URL_WITH_MARK = re.compile(
-    r"https?://[^\s\"'<>\(\)\[\]\{\},;]*collabora"
-    r"[^\s\"'<>\(\)\[\]\{\},;]*",
+    r"""https?://[^\s\\\"'<>\(\)\[\]\{\},;]*collabora"""
+    r"""[^\s\\\"'<>\(\)\[\]\{\},;]*""",
     re.IGNORECASE,
 )
 BRANDED_HOST_FRAGMENT = re.compile(
@@ -390,6 +390,45 @@ def scan_source(root: Path) -> None:
     print("Online Office pre-build debranding scan passed.")
 
 
+def validate_po_catalogues(root: Path, rewrite: bool = False) -> None:
+    """Parse every browser PO catalogue with the Online build converter."""
+    converter = root / "browser/util/po2json.py"
+    catalogue_root = root / "browser/po"
+    catalogues = sorted(catalogue_root.glob("*.po"))
+    if not converter.is_file():
+        raise RuntimeError(f"PO converter is missing: {converter}")
+    if not catalogues:
+        raise RuntimeError(f"no browser PO catalogues found in: {catalogue_root}")
+
+    with tempfile.TemporaryDirectory() as directory:
+        temporary_catalogues = []
+        for catalogue in catalogues:
+            text = catalogue.read_text(encoding="utf-8")
+            if rewrite:
+                text = rewrite_text(text)
+            temporary_catalogue = Path(directory) / catalogue.name
+            temporary_catalogue.write_text(text, encoding="utf-8")
+            temporary_catalogues.append(temporary_catalogue)
+        try:
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(converter),
+                    "--quiet",
+                    *(str(catalogue) for catalogue in temporary_catalogues),
+                ],
+                check=True,
+            )
+        except subprocess.CalledProcessError as error:
+            mode = "transformed " if rewrite else ""
+            raise RuntimeError(
+                f"one or more {mode}browser PO catalogues failed to parse"
+            ) from error
+
+    mode = "transformed " if rewrite else ""
+    print(f"All {len(catalogues)} {mode}browser PO catalogues passed po2json parsing.")
+
+
 def runtime_paths(rootfs: Path) -> list[Path]:
     roots = (
         rootfs / "etc/apache2",
@@ -685,6 +724,20 @@ def self_test() -> None:
     assert "collabora" not in rewritten_catalogue_url.lower()
     assert rewritten_catalogue_url.count("example.invalid") == 3
 
+    wrapped_translated_html = (
+        'msgid ""\n'
+        '"Read <a href=\\"https://www."\n'
+        '"collaboraonline.com/docs/\\">the documentation</a>."\n'
+        'msgstr ""\n'
+        '"Lesen Sie <a href=\\"https://collaboraoffice.com\\">die "\n'
+        '"Dokumentation</a>."\n'
+    )
+    rewritten_translated_html = rewrite_text(wrapped_translated_html)
+    assert "collabora" not in rewritten_translated_html.lower()
+    assert 'href=\\"https://www."' in rewritten_translated_html
+    assert '"example.invalid/docs/\\">the documentation' in (rewritten_translated_html)
+    assert 'href=\\"about:blank\\">die ' in rewritten_translated_html
+
     autoconf_declaration = (
         "AC_INIT([coolwsd], [26.04.4.0], "
         "[https://github.com/CollaboraOnline/online/issues], [coolwsd], "
@@ -821,6 +874,14 @@ def main() -> None:
         subparser = subparsers.add_parser(command)
         subparser.add_argument("root", type=Path)
 
+    po_parser = subparsers.add_parser("validate-po")
+    po_parser.add_argument("root", type=Path)
+    po_parser.add_argument(
+        "--rewrite",
+        action="store_true",
+        help="validate temporary transformed copies without changing the source tree",
+    )
+
     rootfs_parser = subparsers.add_parser("rootfs")
     rootfs_parser.add_argument("rootfs", type=Path)
     rootfs_parser.add_argument("source_root", type=Path)
@@ -841,6 +902,8 @@ def main() -> None:
         apply_source(arguments.root.resolve())
     elif arguments.command == "scan-source":
         scan_source(arguments.root.resolve())
+    elif arguments.command == "validate-po":
+        validate_po_catalogues(arguments.root.resolve(), arguments.rewrite)
     elif arguments.command == "rootfs":
         apply_rootfs(arguments.rootfs.resolve(), arguments.source_root.resolve())
     elif arguments.command == "scan-rootfs":

@@ -116,6 +116,7 @@ fi
 
 python3 "$SRCDIR/debrand.py" source "$BUILDDIR/online" || exit 1
 python3 "$SRCDIR/debrand.py" scan-source "$BUILDDIR/online" || exit 1
+python3 "$SRCDIR/debrand.py" validate-po "$BUILDDIR/online" || exit 1
 
 bash "$SRCDIR/check-builder.sh" "$BUILDDIR/online/configure.ac" || exit 1
 ( cd online && ./autogen.sh ) || exit 1

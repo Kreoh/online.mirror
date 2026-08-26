@@ -14,4 +14,10 @@ grep -Fq 'ONLINE_OFFICE_SOURCE_REVISION' "$repo_root/Jenkinsfile"
 grep -Fq 'ONLINE_OFFICE_SOURCE_REVISION' "$repo_root/docker/from-source/build.sh"
 grep -Fq 'ARG ONLINE_OFFICE_SOURCE_REVISION' "$repo_root/docker/from-source/Distroless"
 
+po_validation_line="$(grep -nF 'debrand.py" validate-po' \
+  "$repo_root/docker/from-source/build.sh" | cut -d: -f1)"
+engine_autogen_line="$(grep -nF 'cd online/engine && ./autogen.sh' \
+  "$repo_root/docker/from-source/build.sh" | cut -d: -f1)"
+test "$po_validation_line" -lt "$engine_autogen_line"
+
 echo "Online Office pipeline debranding checks passed."
