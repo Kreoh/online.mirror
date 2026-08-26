@@ -1,7 +1,7 @@
 pipeline {
     agent {
         node {
-            label 'docker'
+            label 'online-office-builder'
             customWorkspace "workspace/${env.JOB_NAME}"
         }
     }
