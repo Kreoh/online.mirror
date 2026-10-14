@@ -5,6 +5,11 @@ pipeline {
             customWorkspace "workspace/${env.JOB_NAME}"
         }
     }
+    parameters {
+        choice(name: 'BUILD_MODE', choices: ['client-only', 'image'], description: 'Export the matching Java client, or explicitly build and publish an image.')
+        string(name: 'CLIENT_SOURCE_REVISION', defaultValue: '262f997a4b1fccadbe45664a8f21889af3632447', description: 'Full target source revision, independent of the pipeline revision.')
+        string(name: 'CLIENT_IMAGE', defaultValue: 'ghcr.io/kreoh/online-office@sha256:bffd112aa342cfcfdeac6bab9884d787f77786cbf17b2bd230a0bb92a6c9aee6', description: 'Exact existing image for client-only export; must already be present on the Jenkins agent.')
+    }
     environment {
         IMAGE_BASE_NAME = 'ghcr.io/kreoh/online-office'
         SOURCE_BRANCH = 'main'
@@ -19,7 +24,8 @@ pipeline {
         stage('Set Build Variables') {
             steps {
                 script {
-                    env.SHOULD_BUILD = (env.BRANCH_NAME == env.SOURCE_BRANCH)
+                    env.SHOULD_BUILD = (env.BRANCH_NAME == env.SOURCE_BRANCH && params.BUILD_MODE in ['client-only', 'image'])
+                    env.BUILD_MODE = params.BUILD_MODE ?: ''
                 }
             }
         }
@@ -31,23 +37,11 @@ pipeline {
             }
             steps {
                 script {
-                    def scmVars = checkout([
-                        $class: 'GitSCM',
-                        branches: [[name: "*/${env.SOURCE_BRANCH}"]],
-                        doGenerateSubmoduleConfigurations: false,
-                        extensions: [
-                            [$class: 'CloneOption', shallow: true, depth: 1, noTags: true, honorRefspec: true, timeout: 120],
-                            [$class: 'CheckoutOption', timeout: 120],
-                            [$class: 'CleanBeforeCheckout']
-                        ],
-                        userRemoteConfigs: [[
-                            credentialsId: '61c9e22d-1680-43b6-9452-6ef9c2f2a59c',
-                            url: 'https://github.com/Kreoh/online.mirror.git',
-                            refspec: "+refs/heads/${env.SOURCE_BRANCH}:refs/remotes/origin/${env.SOURCE_BRANCH}"
-                        ]]
-                    ])
+                    // Use the revision from which Jenkins loaded this pipeline.
+                    def scmVars = checkout(scm)
                     env.ONLINE_OFFICE_SOURCE_REVISION =
                         scmVars.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.PIPELINE_REVISION = env.ONLINE_OFFICE_SOURCE_REVISION
                     def sourceVersion = sh(
                         script: '''awk -F'[][]' '$2 == "coolwsd" { print $4; exit }' configure.ac''',
                         returnStdout: true
@@ -64,7 +58,7 @@ pipeline {
         stage('Validate Source') {
             when {
                 expression {
-                    env.SHOULD_BUILD.toBoolean()
+                    env.SHOULD_BUILD.toBoolean() && params.BUILD_MODE == 'image'
                 }
             }
             steps {
@@ -102,7 +96,7 @@ pipeline {
         stage('Build Image') {
             when {
                 expression {
-                    env.SHOULD_BUILD.toBoolean()
+                    env.SHOULD_BUILD.toBoolean() && params.BUILD_MODE == 'image'
                 }
             }
             steps {
@@ -180,10 +174,21 @@ pipeline {
                 '''
             }
         }
+        stage('Export Java Client') {
+            when { expression { env.SHOULD_BUILD.toBoolean() } }
+            steps {
+                script {
+                    env.CLIENT_SOURCE_REVISION = params.BUILD_MODE == 'image' ? env.ONLINE_OFFICE_SOURCE_REVISION : params.CLIENT_SOURCE_REVISION
+                    env.CLIENT_IMAGE = params.BUILD_MODE == 'image' ? "${env.IMAGE_BASE_NAME}:${env.IMAGE_TAG}" : params.CLIENT_IMAGE
+                }
+                sh 'bash docker/from-source/export-java-client.sh'
+                archiveArtifacts artifacts: "uno-client-export-${env.BUILD_NUMBER}/uno-client.tar*", fingerprint: true
+            }
+        }
         stage('Push Image') {
             when {
                 expression {
-                    env.SHOULD_BUILD.toBoolean()
+                    env.SHOULD_BUILD.toBoolean() && params.BUILD_MODE == 'image'
                 }
             }
             steps {
@@ -195,15 +200,18 @@ pipeline {
                         docker push "$IMAGE_BASE_NAME:$IMAGE_TAG"
                         docker tag "$IMAGE_BASE_NAME:$IMAGE_TAG" "$IMAGE_BASE_NAME:$SOURCE_BRANCH-latest"
                         docker push "$IMAGE_BASE_NAME:$SOURCE_BRANCH-latest"
+                        docker image inspect --format '{{json .RepoDigests}}' "$IMAGE_BASE_NAME:$IMAGE_TAG" > "uno-client-export-$BUILD_NUMBER/published-image-digests.json"
+                        cp "uno-client-export-$BUILD_NUMBER/uno-client.tar.sha256" "uno-client-export-$BUILD_NUMBER/published-client.sha256"
                     '''
                 }
+                archiveArtifacts artifacts: "uno-client-export-${env.BUILD_NUMBER}/published-*", fingerprint: true
             }
         }
     }
     post {
         success {
             script {
-                if (env.SHOULD_BUILD.toBoolean()) {
+                if (env.SHOULD_BUILD.toBoolean() && params.BUILD_MODE == 'image') {
                     echo "Published ${env.IMAGE_BASE_NAME}:${env.IMAGE_TAG}"
                 } else {
                     echo "Skipping image publication for branch ${env.BRANCH_NAME}."

@@ -1,0 +1,23 @@
+# Export the matching Java client
+
+Use the existing [Collabora main Jenkins job](https://build.internal.kreoh.com/job/Collabora/job/main/). The agent must retain the existing source-builder image, the selected runtime image and the configured cache under `.online-office-source-cache/main` beside its workspace parent (or the existing `ONLINE_OFFICE_SOURCE_CACHE_ROOT` override). This mode creates no builder image and never enters image build or publication.
+
+The job reads `Jenkinsfile` from `main` in `https://github.com/Kreoh/online.mirror.git`. The reviewed pipeline, both export scripts and this document must therefore reach that branch through the normal authorised source submission process before Jenkins can use them. Local edits alone do not update Jenkins. No source push or Jenkins run has been performed as part of preparation. A branch scan may be needed. If the new parameters are absent on the first discovery run, the pipeline registers them and skips work. Its default mode is client-only, so a subsequent automatic run cannot publish an image.
+
+Choose **Build with Parameters** and set:
+
+| Parameter | Value |
+| --- | --- |
+| `BUILD_MODE` | `client-only` |
+| `CLIENT_SOURCE_REVISION` | `262f997a4b1fccadbe45664a8f21889af3632447` |
+| `CLIENT_IMAGE` | `ghcr.io/kreoh/online-office@sha256:bffd112aa342cfcfdeac6bab9884d787f77786cbf17b2bd230a0bb92a6c9aee6` |
+
+The target revision remains independent of the newer pipeline checkout. The export checks the local image's immutable identity and source label, checks the cached source revision and relevant tracked source inputs, and compares both cached registries with copies extracted from that exact image. The bundled core lives in `engine` in the same Git commit; provenance records that commit and its engine tree identity. It does not invent a separate upstream core commit.
+
+The existing configuration is required. In the source-builder container, Jenkins invokes `make -f Makefile.gbuild -B -j2 Executable_javamaker`, bypassing the outer bootstrap, configuration and fetch steps. This forces the generator and its prerequisite closure, with ccache and networking disabled. It does not trust the previous executable or object timestamps. The duration depends on the required prerequisites. Missing configuration, inputs or unsupported generation stops the job; there is no full engine fallback. No native test target or additional test stage is run.
+
+Download `uno-client-export-<build number>/uno-client.tar` and `uno-client.tar.sha256` from the successful build's artefacts. The archive contains the complete generated class tree from both registries, a deterministic maintained runtime source archive, exact registries, licences, the generator and its configuration and source archive, per-file hashes and `PROVENANCE.properties`. The manifest links the pipeline revision, selected source, core tree, image identity, builder identity and Jenkins build URL. For the current source, the runtime list contains 99 files.
+
+Verify the downloaded archive against its sidecar, then pass its real path and hash to ChatUI's `:office-java-dependencies:prepareMatchingUnoSources` with `-PofficeUnoClientBundle=...` and `-PofficeUnoClientBundleSha256=...`. See that module's README. Return both artefacts and the Jenkins build URL for the remaining API audit and compilation. The runtime guard remains active until the existing compatibility, cancellation and disposable document gates pass. Successful generation alone does not establish compatibility.
+
+For a separately authorised future image build, select `BUILD_MODE=image`. The pipeline exports and archives the matching client from the newly built local image before entering publication. Export failure prevents publication. It archives the published repository digests and the client archive hash together after publication, linking the pre-publication image ID to its registry identity. The client-only request does not authorise that image mode.
