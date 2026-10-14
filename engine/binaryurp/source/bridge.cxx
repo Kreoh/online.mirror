@@ -24,6 +24,7 @@
 #include <cstddef>
 #include <limits>
 #include <memory>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -46,6 +47,7 @@
 #include <rtl/ref.hxx>
 #include <rtl/string.h>
 #include <rtl/ustring.hxx>
+#include <rtl/ustrbuf.hxx>
 #include <sal/log.hxx>
 #include <sal/types.h>
 #include <typelib/typeclass.h>
@@ -159,6 +161,97 @@ void PopOutgoingRequest::clear() {
     cleared_ = true;
 }
 
+}
+
+namespace {
+
+// These published identities moved to cpo.uno upstream. Their wire layouts did
+// not change. Translate type tokens only, never document strings or object IDs.
+constexpr std::u16string_view RenamedUnoTypes[] = {
+    u"Exception", u"XInterface", u"XComponentContext", u"SecurityException",
+    u"RuntimeException", u"DeploymentException", u"XWeak", u"XUnloadingPreference",
+    u"XReference", u"XNamingService", u"XCurrentContext", u"XAggregation",
+    u"XAdapter", u"TypeClass", u"NamingService"
+};
+
+struct WireTypeName {
+    OUString mapped;
+    bool legacy = false;
+    bool native = false;
+};
+
+WireTypeName mapWireTypeName(OUString const & name, bool toLegacy)
+{
+    constexpr std::u16string_view LegacyPrefix = u"com.sun.star.uno.";
+    constexpr std::u16string_view NativePrefix = u"cpo.uno.";
+    std::u16string_view input(name);
+    OUStringBuffer output;
+    WireTypeName result;
+    for (std::size_t begin = 0; begin < input.size();)
+    {
+        // Sequence prefixes and nested polymorphic struct arguments are part of
+        // type names. Only complete identifier tokens may select a namespace.
+        if (input[begin] == u'[' || input[begin] == u']' || input[begin] == u'<' ||
+            input[begin] == u'>' || input[begin] == u',')
+        {
+            output.append(input[begin++]);
+            continue;
+        }
+        auto end = input.find_first_of(u"[]<>,", begin);
+        if (end == std::u16string_view::npos)
+            end = input.size();
+        auto token = input.substr(begin, end - begin);
+        bool legacy = token.starts_with(LegacyPrefix);
+        bool native = token.starts_with(NativePrefix);
+        auto suffix = legacy ? token.substr(LegacyPrefix.size()) :
+                      native ? token.substr(NativePrefix.size()) : token;
+        if ((legacy || native) &&
+            std::find(std::begin(RenamedUnoTypes), std::end(RenamedUnoTypes), suffix) !=
+                std::end(RenamedUnoTypes))
+        {
+            result.legacy |= legacy;
+            result.native |= native;
+            output.append(toLegacy ? LegacyPrefix : NativePrefix);
+            output.append(suffix);
+        }
+        else
+            output.append(token);
+        begin = end;
+    }
+    result.mapped = output.makeStringAndClear();
+    return result;
+}
+
+}
+
+void Bridge::selectWireNamespace(WireNamespace value)
+{
+    auto expected = WireNamespace::Undecided;
+    if (!wireNamespace_.compare_exchange_strong(expected, value) && expected != value)
+        throw css::io::IOException(u"URP peer mixed legacy and native UNO type identities"_ustr);
+}
+
+OUString Bridge::incomingTypeName(OUString const & name)
+{
+    auto mapped = mapWireTypeName(name, false);
+    if (mapped.legacy && mapped.native)
+        throw css::io::IOException(u"URP type mixes legacy and native UNO identities"_ustr);
+    if (mapped.legacy || mapped.native)
+        selectWireNamespace(mapped.legacy ? WireNamespace::Legacy : WireNamespace::Native);
+    return mapped.mapped;
+}
+
+OUString Bridge::outgoingTypeName(OUString const & name)
+{
+    auto mapped = mapWireTypeName(name, true);
+    if (!mapped.native)
+        return name;
+    // The initial protocol-properties exchange contains no renamed types. A
+    // legacy caller selects its namespace with its first interface request.
+    // Lock the choice before caching any renamed outgoing type as well.
+    auto expected = WireNamespace::Undecided;
+    wireNamespace_.compare_exchange_strong(expected, WireNamespace::Native);
+    return wireNamespace_.load() == WireNamespace::Legacy ? mapped.mapped : name;
 }
 
 struct Bridge::SubStub {

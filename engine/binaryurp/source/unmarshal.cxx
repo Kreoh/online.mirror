@@ -159,7 +159,7 @@ cpo::uno::TypeDescription Unmarshal::readType() {
                 }
                 return state_.typeCache[idx];
             } else {
-                OUString const str(readString());
+                OUString const str(bridge_->incomingTypeName(readString()));
                 cpo::uno::TypeDescription t(str);
                 if (!t.is() || t.get()->eTypeClass != tc) {
 

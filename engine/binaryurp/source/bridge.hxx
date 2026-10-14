@@ -21,6 +21,7 @@
 
 #include <sal/config.h>
 
+#include <atomic>
 #include <cstddef>
 #include <map>
 #include <mutex>
@@ -72,6 +73,10 @@ public:
         cpo::uno::Reference< css::bridge::XInstanceProvider > provider);
 
     void start();
+
+    OUString incomingTypeName(OUString const & name);
+    OUString outgoingTypeName(OUString const & name);
+
 
     // Internally waits for all incoming and outgoing remote calls to terminate,
     // so must not be called from within such a call; when final is true, also
@@ -252,7 +257,12 @@ private:
         // decrementActiveCalls, without an intervening exception
     osl::Condition terminated_;
 
+    enum class WireNamespace { Undecided, Native, Legacy };
+    void selectWireNamespace(WireNamespace value);
+    std::atomic<WireNamespace> wireNamespace_{WireNamespace::Undecided};
+
     std::mutex mutex_;
+
     State state_;
     Listeners listeners_;
     uno_ThreadPool threadPool_;

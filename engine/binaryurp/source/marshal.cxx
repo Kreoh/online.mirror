@@ -140,7 +140,7 @@ void Marshal::writeType(
         } else {
             write8(buffer, static_cast< sal_uInt8 >(tc) | 0x80);
             write16(buffer, idx);
-            writeString(buffer, OUString(value.get()->pTypeName));
+            writeString(buffer, bridge_->outgoingTypeName(OUString(value.get()->pTypeName)));
         }
     }
 }
