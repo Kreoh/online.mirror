@@ -17,6 +17,7 @@ import zipfile
 from pathlib import Path
 
 PRODUCT_NAME = "Online Office"
+LIBRELOGO_EXTENSION_ID = "com.collaboraoffice.librelogo"
 FORBIDDEN_MARK = re.compile(r"\bcollabora(?:[_ -]?(?:office|online))?\b", re.IGNORECASE)
 URL_WITH_MARK = re.compile(
     r"""https?://[^\s\\\"'<>\(\)\[\]\{\},;]*collabora"""
@@ -43,6 +44,7 @@ LEGAL_OR_PROVENANCE = re.compile(
 )
 
 COMPATIBILITY = re.compile(
+    rf"(?<![\w.-]){re.escape(LIBRELOGO_EXTENSION_ID)}(?:\.pot)?(?![\w.-])|"
     r"COM\.COLLABORAOFFICE\.MSVD|"
     r"urn:com:collaboraoffice|xmlns:coext|\bcoext:",
     re.IGNORECASE,
@@ -301,6 +303,18 @@ def apply_source(root: Path) -> None:
     print(f"Debranded {changed} source files and installed the neutral favicon source.")
 
 
+def extension_identity_path(path: Path) -> bool:
+    """Preserve the built-in extension ID and its matching gettext template name."""
+    return (
+        path.name == LIBRELOGO_EXTENSION_ID and path.parent.name == "extensions"
+    ) or path.parts[-4:] == (
+        "extensions",
+        LIBRELOGO_EXTENSION_ID,
+        "po",
+        f"{LIBRELOGO_EXTENSION_ID}.pot",
+    )
+
+
 def legal_path(path: Path) -> bool:
     upper_parts = {part.upper() for part in path.parts}
     name = path.name.upper()
@@ -329,7 +343,11 @@ def scan_files(paths: list[Path], include_binaries: bool = False) -> list[str]:
     for path in paths:
         if not path.is_file() or path.is_symlink():
             continue
-        if FORBIDDEN_MARK.search(path.name) and not legal_path(path):
+        if (
+            FORBIDDEN_MARK.search(path.name)
+            and not legal_path(path)
+            and not extension_identity_path(path)
+        ):
             violations.append(f"branded filename: {path}")
         if path.suffix.lower() in ARCHIVE_SUFFIXES:
             try:
@@ -468,7 +486,7 @@ def apply_rootfs(rootfs: Path, source_root: Path) -> None:
     browser_dist = rootfs / "usr/share/coolwsd/browser/dist"
     if browser_dist.exists():
         for path in sorted(browser_dist.rglob("*"), reverse=True):
-            if FORBIDDEN_MARK.search(path.name):
+            if FORBIDDEN_MARK.search(path.name) and not extension_identity_path(path):
                 if path.is_dir():
                     shutil.rmtree(path)
                 else:
